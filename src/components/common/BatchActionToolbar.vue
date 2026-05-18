@@ -2,6 +2,12 @@
   <div class="batch-toolbar">
     <span class="batch-count">已選取 {{ count }} 項</span>
     <div class="batch-actions">
+      <button v-if="showLifecycle" class="btn-cancel" @click="$emit('confirm-activate')">
+        啟用
+      </button>
+      <button v-if="showLifecycle" class="btn-cancel" @click="$emit('confirm-deactivate')">
+        停用
+      </button>
       <button class="btn-danger-outline" @click="$emit('confirm-delete')">刪除</button>
       <button class="btn-cancel" @click="$emit('cancel')">取消</button>
     </div>
@@ -9,14 +15,21 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+
 interface Props {
   count: number;
+  /** 啟用後顯示「啟用 / 停用」批次按鈕（組織管理用，其他頁預設不顯示） */
+  showDeactivate?: boolean;
 }
 
-defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { showDeactivate: false });
+const showLifecycle = computed(() => props.showDeactivate);
 
 defineEmits<{
   'confirm-delete': [];
+  'confirm-deactivate': [];
+  'confirm-activate': [];
   cancel: [];
 }>();
 </script>
@@ -44,7 +57,7 @@ defineEmits<{
   margin-left: auto;
 }
 
-/* 對齊設計系統 .btn 家族：兩鈕同尺寸、膠囊圓角 */
+/* 對齊設計系統 .btn 家族：同尺寸、膠囊圓角 */
 .btn-danger-outline,
 .btn-cancel {
   display: inline-flex;

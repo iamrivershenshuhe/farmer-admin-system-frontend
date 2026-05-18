@@ -176,6 +176,23 @@
     transition: background-color 0.15s ease;
   }
 
+  /* 中性反相鈕（停用等「安全但非主行動」操作；主色綠保留給安全主 CTA）
+     淺色＝黑底白字、深色＝白底黑字（同 tooltip 反相 token） */
+  .btn-neutral {
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    color: var(--tooltip-text);
+    cursor: pointer;
+    background-color: var(--tooltip-bg);
+    border: 1px solid transparent;
+    border-radius: var(--r-pill);
+  }
+
+  .btn-neutral:hover {
+    opacity: 0.88;
+    transition: opacity 0.15s ease;
+  }
+
   /* 次要 / ghost */
   .btn-secondary {
     padding: 0.5rem 1rem;
@@ -202,6 +219,11 @@
     border-radius: var(--r-md);
   }
 
+  .input:hover {
+    border-color: var(--border-strong);
+    transition: border-color 0.15s ease;
+  }
+
   .input:focus {
     outline: none;
     border-color: var(--accent);
@@ -210,6 +232,96 @@
 
   .input::placeholder {
     color: var(--text-3);
+  }
+
+  /* ── 表單 kit（對齊 design-system-preview 的 kb-fields / kb-select）── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem 1rem;
+  }
+
+  .form-grid .full {
+    grid-column: 1 / -1;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .field-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-2);
+    letter-spacing: 0.02em;
+  }
+
+  .field-label .req {
+    color: var(--accent);
+  }
+
+  textarea.input {
+    min-height: 56px;
+    resize: vertical;
+  }
+
+  .select-wrap {
+    position: relative;
+    display: inline-flex;
+    width: 100%;
+  }
+
+  .select-field {
+    width: 100%;
+    padding: 0.5rem 2.5rem 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    color: var(--text);
+    appearance: none;
+    cursor: pointer;
+    background: var(--bg-1);
+    border: 2px solid var(--border);
+    border-radius: var(--r-md);
+  }
+
+  .select-field:hover {
+    border-color: var(--border-strong);
+    transition: border-color 0.15s ease;
+  }
+
+  .select-field:focus {
+    outline: none;
+    border-color: var(--accent);
+    transition: border-color 0.15s ease;
+  }
+
+  .select-wrap::after {
+    position: absolute;
+    top: 50%;
+    right: 1rem;
+    width: 8px;
+    height: 8px;
+    pointer-events: none;
+    content: '';
+    border-right: 2px solid var(--text-2);
+    border-bottom: 2px solid var(--text-2);
+    transform: translateY(-70%) rotate(45deg);
+  }
+
+  .modal-error {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--error);
+  }
+
+  .modal-hint {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-2);
   }
 
   /* 側邊欄 */

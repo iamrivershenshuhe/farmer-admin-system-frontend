@@ -54,6 +54,9 @@ function resolvePrincipal(request: Request): UserInfo | null {
 
 /** 依規格 1.3 可見範圍規則過濾（manager 的 businessTypeIds 已含本部門全部） */
 function isVisible(doc: KnowledgeDocument, user: UserInfo): boolean {
+  // 契約（domain.md「Visibility contract」）：「看全部」唯一條件是 role==='admin'。
+  // 此處保留 departmentId==null 分支僅因「非 admin 一律有部門」由表單層保證（UserModal）；
+  // 後端整合務必只憑 role 判定，不得用 department_id IS NULL 當 see-all 哨兵。
   if (user.role === 'admin' || user.departmentId == null) return true;
   switch (doc.docType) {
     case 'public_regulation':

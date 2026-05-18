@@ -52,6 +52,8 @@ function resolvePrincipal(request: Request): UserInfo | null {
  *   user：僅可見自己的 sessions（依 createdById）
  */
 function applyVisibilityFilter(sessions: FormSessionRecord[], user: UserInfo): FormSessionRecord[] {
+  // 契約（domain.md「Visibility contract」）：「看全部」唯一條件是 role==='admin'。
+  // departmentId==null 分支僅因「非 admin 一律有部門」由表單層保證；後端勿用 dept IS NULL 當 see-all。
   if (user.role === 'admin' || user.departmentId == null) return sessions;
   if (user.role === 'manager') {
     return sessions.filter((s) => s.createdByDepartmentId === user.departmentId);

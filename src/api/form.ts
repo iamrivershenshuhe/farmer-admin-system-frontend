@@ -1,40 +1,14 @@
 /**
  * E-form API（電子表單）
  * 採用 PDF 座標映射方案
- *
- * TODO: 後端整合後替換各函式內容
- * 目前皆為 stub，實際資料由 stores/eform.ts + mock/eform.ts 提供
  */
 
-import type {
-  ApiResponse,
-  EFormBusinessType,
-  EFormTemplate,
-  FormFieldCoord,
-  FormSessionRecord,
-  PaginationParams,
-  PaginationResponse,
-} from '@/types';
+import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';
+import type { EFormTemplate, FormSessionRecord, GeneratePdfResult } from '@/types/form';
 import { httpClient } from '@/utils/request';
 
 // ---------------------------------------------------------------------------
-// 業務別
-// ---------------------------------------------------------------------------
-
-/**
- * 取得所有啟用中的業務別（含子模板清單）
- */
-export const getBusinessTypes = async (): Promise<ApiResponse<EFormBusinessType[]>> =>
-  httpClient.get<EFormBusinessType[]>('/eform/business-types');
-
-/**
- * 取得單一業務別
- */
-export const getBusinessType = async (id: string): Promise<ApiResponse<EFormBusinessType>> =>
-  httpClient.get<EFormBusinessType>(`/eform/business-types/${id}`);
-
-// ---------------------------------------------------------------------------
-// 表單模板
+// 模板（業務別清單改走組織端點 /departments 與 /business-types）
 // ---------------------------------------------------------------------------
 
 /**
@@ -43,62 +17,39 @@ export const getBusinessType = async (id: string): Promise<ApiResponse<EFormBusi
 export const getTemplates = async (businessTypeId: string): Promise<ApiResponse<EFormTemplate[]>> =>
   httpClient.get<EFormTemplate[]>('/eform/templates', { params: { businessTypeId } });
 
-/**
- * 取得單一表單模板（含所有欄位定義）
- */
-export const getTemplate = async (templateId: string): Promise<ApiResponse<EFormTemplate>> =>
-  httpClient.get<EFormTemplate>(`/eform/templates/${templateId}`);
-
-// ---------------------------------------------------------------------------
-// 欄位座標
-// ---------------------------------------------------------------------------
-
-/**
- * 取得指定模板的欄位座標清單
- */
-export const getFieldCoords = async (templateId: string): Promise<ApiResponse<FormFieldCoord[]>> =>
-  httpClient.get<FormFieldCoord[]>(`/eform/templates/${templateId}/fields`);
-
-/**
- * 計算選取模板的聯集欄位（後端計算，避免前端重複邏輯）
- * @param templateIds 選取的模板 ID 陣列
- */
-export const getUnionFields = async (
-  templateIds: string[]
-): Promise<ApiResponse<FormFieldCoord[]>> =>
-  httpClient.post<FormFieldCoord[]>('/eform/union-fields', { templateIds });
-
 // ---------------------------------------------------------------------------
 // 生成 & 下載
 // ---------------------------------------------------------------------------
 
 /**
- * 生成 PDF（後端疊加座標填入，回傳暫存下載 URL）
- */
-export const generatePdf = async (payload: {
-  templateId: string;
-  applicantData: Record<string, string>;
-}): Promise<ApiResponse<{ downloadUrl: string; expiresAt: string }>> =>
-  httpClient.post('/eform/generate', payload);
-
-/**
- * 批次生成 PDF（多張表單一次生成，回傳打包 ZIP URL）
+ * 批次生成 PDF（多張表單一次生成），同時寫入 session，
+ * 回傳打包 ZIP URL 與每檔暫存 downloadUrl
  */
 export const generateBatch = async (payload: {
   templateIds: string[];
+  businessTypeId: string;
+  businessTypeName: string;
   applicantData: Record<string, string>;
-}): Promise<ApiResponse<{ downloadUrl: string; expiresAt: string }>> =>
-  httpClient.post('/eform/generate/batch', payload);
+}): Promise<ApiResponse<GeneratePdfResult>> => httpClient.post('/eform/generate/batch', payload);
 
 // ---------------------------------------------------------------------------
 // 生成歷程
 // ---------------------------------------------------------------------------
 
+export interface GetSessionsParams extends PaginationParams {
+  businessTypeId?: string;
+  /** admin 可依部門篩選 */
+  departmentId?: string;
+  /** manager/admin 可依帳號篩選 */
+  createdById?: string;
+}
+
 /**
- * 取得當前使用者的生成歷程
+ * 取得歷程列表（後端依呼叫者角色套用 RBAC scope，支援分頁與篩選）
+ * 前端以無限滾動懶加載方式呼叫（page 遞增，append 結果）
  */
 export const getSessions = async (
-  params: PaginationParams & { businessTypeId?: string }
+  params: GetSessionsParams
 ): Promise<ApiResponse<PaginationResponse<FormSessionRecord>>> =>
   httpClient.get<PaginationResponse<FormSessionRecord>>('/eform/sessions', { params });
 

@@ -1,37 +1,42 @@
 <template>
   <div class="business-selector">
-    <!-- 業務別下拉 -->
-    <div class="selector-section">
-      <label class="field-label" for="business-select">選擇業務別</label>
-      <div class="select-wrapper">
-        <select
-          id="business-select"
-          class="base-select"
-          :value="selectedBusinessId"
-          @change="onBusinessChange"
-        >
-          <option value="">-- 請選擇業務別 --</option>
-          <option v-for="bt in businessTypes" :key="bt.id" :value="bt.id">
-            {{ bt.name }}
-          </option>
-        </select>
-        <svg class="select-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
+    <!-- 部門 + 業務別：同列並排、皆常駐（對齊設計系統 .ef-row） -->
+    <div class="ef-row">
+      <div class="ef-field">
+        <label class="ef-field-label">
+          所屬部門
+          <span v-if="isDeptLocked" class="ef-lock">
+            ·
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="5" y="11" width="14" height="9" rx="2" />
+              <path d="M8 11V7a4 4 0 018 0v4" />
+            </svg>
+            系統預選鎖定
+          </span>
+        </label>
+        <FilterSelect
+          :model-value="effectiveDeptId"
+          :options="deptSelectOptions"
+          placeholder="請選擇部門"
+          :disabled="isDeptLocked"
+          @update:model-value="onDeptChange"
+        />
       </div>
-      <p v-if="selectedBusiness?.description" class="business-desc">
-        {{ selectedBusiness.description }}
-      </p>
+      <div class="ef-field">
+        <label class="ef-field-label">業務別</label>
+        <FilterSelect
+          :model-value="selectedBusinessId"
+          :options="businessSelectOptions"
+          placeholder="請選擇業務別"
+          :disabled="!effectiveDeptId || isBtLoading"
+          @update:model-value="onBusinessChange"
+        />
+      </div>
     </div>
 
-    <!-- 表單列表（選了業務別才顯示） -->
+    <!-- 模板列表（選了業務別才顯示） -->
     <Transition name="slide-down">
-      <div v-if="selectedBusiness" class="templates-section">
+      <div v-if="selectedBusinessId && availableTemplates.length > 0" class="templates-section">
         <div class="templates-header">
           <span class="templates-title">此業務別包含以下表單</span>
           <span class="templates-hint">請勾選本次需要產出的表單</span>
@@ -39,9 +44,9 @@
 
         <div class="template-list">
           <label
-            v-for="tmpl in selectedBusiness.templates"
+            v-for="tmpl in availableTemplates"
             :key="tmpl.id"
-            class="template-item"
+            class="template-row"
             :class="{ 'template-checked': selectedTemplateIds.includes(tmpl.id) }"
           >
             <input
@@ -51,73 +56,159 @@
               :checked="selectedTemplateIds.includes(tmpl.id)"
               @change="onTemplateToggle(tmpl.id)"
             />
-            <div class="template-info">
-              <div class="template-filename">
-                <svg class="doc-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-                {{ tmpl.pdfFileName }}
-              </div>
-            </div>
-            <div class="template-field-count">
-              <span class="count-badge">{{ tmpl.fields.length }} 欄位</span>
-            </div>
+            <FileTypeBadge label="PDF" />
+            <span class="template-name">{{ tmpl.pdfFileName }}</span>
+            <span class="template-col">{{ selectedBusinessName }}</span>
+            <span class="template-col template-col-fields">{{ tmpl.fields.length }} 個欄位</span>
           </label>
         </div>
 
-        <div v-if="selectedTemplateIds.length === 0" class="no-selection-hint">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="hint-icon">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+        <p v-if="selectedTemplateIds.length === 0" class="no-selection-hint">
           請至少勾選一張表單才能繼續
-        </div>
+        </p>
       </div>
     </Transition>
+
+    <!-- 業務別有值但無模板（且非載入中） -->
+    <div
+      v-if="selectedBusinessId && !eformStore.isLoading && availableTemplates.length === 0"
+      class="no-selection-hint"
+    >
+      此業務別目前無可用表單
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
+import FileTypeBadge from '@/components/common/FileTypeBadge.vue';
+import FilterSelect from '@/components/common/FilterSelect.vue';
+import { useBusinessTypeStore } from '@/stores/business-type';
+import { useDepartmentStore } from '@/stores/department';
 import { useEFormStore } from '@/stores/eform';
+import type { BusinessType } from '@/types/department';
+import type { EFormTemplate } from '@/types/form';
 
-const props = defineProps<{
+interface Props {
   selectedBusinessId: string;
   selectedTemplateIds: string[];
-}>();
+  /** 是否為 admin（可選任意部門） */
+  isAdmin: boolean;
+  /** 是否為 manager（鎖定部門、可選全部業務別） */
+  isManager: boolean;
+  /** 使用者所屬部門 ID（user / manager 預選並鎖定） */
+  userDepartmentId: string | null;
+  /** 使用者被分配的業務別 ID 清單（user 限制選項） */
+  userBusinessTypeIds: string[];
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  userDepartmentId: null,
+  userBusinessTypeIds: () => [],
+});
 
 const emit = defineEmits<{
   (e: 'update:selectedBusinessId', id: string): void;
   (e: 'update:selectedTemplateIds', ids: string[]): void;
 }>();
 
+const departmentStore = useDepartmentStore();
+const businessTypeStore = useBusinessTypeStore();
 const eformStore = useEFormStore();
 
-const businessTypes = computed(() => eformStore.businessTypes.filter((b) => b.active));
+// admin 部門選取狀態（僅 admin 可修改）
+const adminDeptId = ref('');
 
-const selectedBusiness = computed(
-  () => businessTypes.value.find((b) => b.id === props.selectedBusinessId) ?? null
+// ── 部門 ──────────────────────────────────────────────────
+
+/** user/manager 鎖定部門選單 */
+const isDeptLocked = computed(() => !props.isAdmin);
+
+/** 目前生效的部門 ID */
+const effectiveDeptId = computed(() =>
+  props.isAdmin ? adminDeptId.value : (props.userDepartmentId ?? '')
 );
 
-function onBusinessChange(e: Event) {
-  const val = (e.target as HTMLSelectElement).value;
-  emit('update:selectedBusinessId', val);
-  // 切換業務別時預設全選
-  const bt = eformStore.businessTypes.find((b) => b.id === val);
-  emit('update:selectedTemplateIds', bt ? bt.templates.map((t) => t.id) : []);
+/** 部門下拉選項（FilterSelect 格式） */
+const deptSelectOptions = computed(() =>
+  departmentStore.activeDepartments.map((d) => ({ value: d.id, label: d.name }))
+);
+
+// 非 admin 時，userDepartmentId 確定後自動載入業務別
+watch(
+  () => props.userDepartmentId,
+  (deptId) => {
+    if (!props.isAdmin && deptId) {
+      businessTypeStore.fetchBusinessTypes(deptId);
+    }
+  },
+  { immediate: true }
+);
+
+// ── 業務別 ────────────────────────────────────────────────
+
+const isBtLoading = computed(() => {
+  const deptId = effectiveDeptId.value;
+  return deptId ? (businessTypeStore.isLoadingByDept[deptId] ?? false) : false;
+});
+
+/** 該部門下啟用的業務別原始清單 */
+const deptBusinessTypes = computed((): BusinessType[] => {
+  const deptId = effectiveDeptId.value;
+  if (!deptId) return [];
+  return (businessTypeStore.businessTypesByDept[deptId] ?? []).filter((b) => b.active);
+});
+
+/** 依角色過濾業務別選項 */
+const businessTypeOptions = computed((): BusinessType[] => {
+  if (props.isAdmin || props.isManager) {
+    return deptBusinessTypes.value;
+  }
+  // user：僅被分配的業務別 ∩ 該部門業務別
+  const allowed = new Set(props.userBusinessTypeIds);
+  return deptBusinessTypes.value.filter((b) => allowed.has(b.id));
+});
+
+/** 業務別下拉選項（FilterSelect 格式） */
+const businessSelectOptions = computed(() =>
+  businessTypeOptions.value.map((b) => ({ value: b.id, label: b.name }))
+);
+
+/** 目前所選業務別名稱（表單清單欄位顯示用） */
+const selectedBusinessName = computed(
+  () => businessTypeOptions.value.find((b) => b.id === props.selectedBusinessId)?.name ?? ''
+);
+
+// ── 模板 ──────────────────────────────────────────────────
+
+/** 當前業務別下的模板（由 eform store getter 計算） */
+const availableTemplates = computed((): EFormTemplate[] => {
+  if (!props.selectedBusinessId) return [];
+  return eformStore.templatesByBusinessType(props.selectedBusinessId);
+});
+
+// ── 事件處理 ───────────────────────────────────────────────
+
+function onDeptChange(deptId: string): void {
+  adminDeptId.value = deptId;
+  // 部門變更：清空下游選擇
+  emit('update:selectedBusinessId', '');
+  emit('update:selectedTemplateIds', []);
+  if (deptId) {
+    businessTypeStore.fetchBusinessTypes(deptId);
+  }
 }
 
-function onTemplateToggle(id: string) {
+async function onBusinessChange(btId: string): Promise<void> {
+  emit('update:selectedBusinessId', btId);
+  emit('update:selectedTemplateIds', []);
+  if (btId) {
+    await eformStore.fetchTemplates(btId);
+  }
+}
+
+function onTemplateToggle(id: string): void {
   const current = [...props.selectedTemplateIds];
   const idx = current.indexOf(id);
   if (idx === -1) {
@@ -136,61 +227,48 @@ function onTemplateToggle(id: string) {
   gap: 1.75rem;
 }
 
-/* --- 下拉 --- */
-.selector-section {
+/* --- 部門 / 業務別 同列（對齊設計系統 .ef-row） --- */
+.ef-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.ef-field {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
+  width: 240px;
 }
 
-.field-label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.select-wrapper {
-  position: relative;
+.ef-field :deep(.filter-select) {
   width: 100%;
-  max-width: 360px;
 }
 
-.base-select {
-  width: 100%;
-  padding: 0.75rem 2.5rem 0.75rem 1rem;
-  font-size: 0.9375rem;
-  color: var(--text);
-  appearance: none;
-  cursor: pointer;
-  outline: none;
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-}
-
-.base-select:focus {
-  border-color: var(--accent);
-  transition: border-color 0.2s ease;
-}
-
-.select-arrow {
-  position: absolute;
-  top: 50%;
-  right: 0.75rem;
-  width: 1rem;
-  height: 1rem;
+.ef-field-label {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-2);
-  pointer-events: none;
-  transform: translateY(-50%);
+  letter-spacing: 0.02em;
 }
 
-.business-desc {
-  margin: 0.25rem 0 0;
-  font-size: 0.8125rem;
-  color: var(--text-2);
+.ef-lock {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-3);
 }
 
-/* --- 表單列表 --- */
+.ef-lock svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* --- 模板列表 --- */
 .templates-section {
   display: flex;
   flex-direction: column;
@@ -214,35 +292,37 @@ function onTemplateToggle(id: string) {
   color: var(--text-2);
 }
 
+/* 單一容器、列以分隔線區隔（對齊 mockup .ef-tpllist） */
 .template-list {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  overflow: hidden;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
 }
 
-.template-item {
+.template-row {
   display: flex;
-  gap: 1rem;
+  gap: 0.875rem;
   align-items: center;
-  padding: 1rem 1.25rem;
+  padding: 0.875rem 1.125rem;
   cursor: pointer;
   user-select: none;
-  background: var(--bg-hover);
-  border: 1.5px solid var(--border);
-  border-radius: 0.625rem;
+  border-bottom: 1px solid var(--border);
 }
 
-.template-item:hover {
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-hover));
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
+.template-row:last-child {
+  border-bottom: none;
+}
+
+.template-row:hover {
+  background: var(--bg-hover);
+  transition: background-color 0.15s ease;
 }
 
 .template-checked {
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-hover)) !important;
-  border-color: var(--accent) !important;
+  background: var(--accent-soft);
 }
 
 .template-checkbox {
@@ -253,113 +333,31 @@ function onTemplateToggle(id: string) {
   cursor: pointer;
 }
 
-.template-info {
-  display: flex;
+.template-name {
   flex: 1;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.template-filename {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.9375rem;
   font-weight: 500;
   color: var(--text);
+  white-space: nowrap;
 }
 
-.doc-icon {
+.template-col {
   flex-shrink: 0;
-  width: 1.125rem;
-  height: 1.125rem;
-  color: var(--accent);
-}
-
-.template-field-count {
-  flex-shrink: 0;
-}
-
-.count-badge {
-  padding: 0.25rem 0.625rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-radius: 1rem;
-}
-
-/* --- 聯集預覽 --- */
-.union-preview {
-  padding: 1rem 1.25rem;
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-1));
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
-  border-radius: 0.625rem;
-}
-
-.union-title {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  margin-bottom: 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--accent);
-}
-
-.union-icon {
-  flex-shrink: 0;
-  width: 1rem;
-  height: 1rem;
-}
-
-.union-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.field-chip {
-  display: flex;
-  gap: 0.2rem;
-  align-items: center;
-  padding: 0.3125rem 0.75rem;
   font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text);
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
-  border-radius: 1rem;
+  color: var(--text-3);
 }
 
-.chip-required {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-hover));
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+.template-col-fields {
+  width: 5rem;
+  text-align: right;
 }
 
-.chip-req-mark {
-  font-size: 0.875rem;
-  color: var(--error);
-}
-
-/* --- 提示 --- */
 .no-selection-hint {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.875rem 1.25rem;
-  font-size: 0.875rem;
-  color: var(--text-2);
-  background: var(--bg-hover);
-  border: 1px dashed var(--border);
-  border-radius: 0.5rem;
-}
-
-.hint-icon {
-  flex-shrink: 0;
-  width: 1.125rem;
-  height: 1.125rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-3);
 }
 
 /* --- 動畫 --- */
@@ -375,5 +373,11 @@ function onTemplateToggle(id: string) {
 .slide-down-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+@media (width <= 767px) {
+  .ef-field {
+    width: 100%;
+  }
 }
 </style>

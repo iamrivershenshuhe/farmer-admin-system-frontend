@@ -1,42 +1,62 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
-import { FIELD_DEF_MAP } from '@/config';
+import type { GetSessionsParams } from '@/api/form';
+import { generateBatch, getSessions, getTemplates } from '@/api/form';
+import { FIELD_DEF_MAP } from '@/config/eform';
+import type { PaginationResponse } from '@/types/api';
 import type {
   ApplicantFieldDef,
-  EFormBusinessType,
   EFormTemplate,
   FormFieldCoord,
   FormSessionRecord,
+  GeneratePdfResult,
 } from '@/types/form';
-import { httpClient } from '@/utils/request';
 
 export const useEFormStore = defineStore('eform', () => {
   // State
-  const businessTypes = ref<EFormBusinessType[]>([]);
+
+  /** 已載入的模板清單（平坦，不再按業務別分組；分組由組織 store 負責） */
+  const templates = ref<EFormTemplate[]>([]);
+  /** 歷程列表（無限滾動：fetchSessions 初次載入覆蓋，loadMoreSessions 追加） */
   const sessions = ref<FormSessionRecord[]>([]);
+  /** 歷程分頁狀態 */
+  const sessionPagination = ref<Omit<PaginationResponse<unknown>, 'items'>>({
+    total: 0,
+    page: 1,
+    pageSize: 10,
+    totalPages: 1,
+  });
   const isLoading = ref(false);
+  const isSessionLoading = ref(false);
 
   // Getters
 
-  /** 依業務別 ID 取得業務別資料 */
-  const getBusinessType = computed(
-    () => (id: string) => businessTypes.value.find((bt) => bt.id === id)
+  /** 依業務別 ID 取得該業務別下的模板清單 */
+  const templatesByBusinessType = computed(
+    () => (businessTypeId: string) =>
+      templates.value.filter((t) => t.businessTypeId === businessTypeId && t.active)
   );
 
-  /** 依業務別及選取的模板 IDs 計算聯集欄位 */
+  /** 取得指定模板物件 */
+  const getTemplate = computed(
+    () =>
+      (templateId: string): EFormTemplate | undefined =>
+        templates.value.find((t) => t.id === templateId)
+  );
+
+  /**
+   * 依選取的模板 IDs 計算聯集欄位
+   * 任一表單 required → 聯集亦 required；依 FIELD_DEF_MAP 排序
+   */
   const getUnionFields = computed(() => (templateIds: string[]): ApplicantFieldDef[] => {
-    // 蒐集所有選中模板的欄位
     const allFields: FormFieldCoord[] = [];
-    for (const bt of businessTypes.value) {
-      for (const tmpl of bt.templates) {
-        if (templateIds.includes(tmpl.id)) {
-          allFields.push(...tmpl.fields);
-        }
+    for (const tmpl of templates.value) {
+      if (templateIds.includes(tmpl.id)) {
+        allFields.push(...tmpl.fields);
       }
     }
 
-    // 依 fieldKey 聯集：任一表單 required→聯集亦 required
     const unionMap = new Map<string, ApplicantFieldDef>();
     for (const f of allFields) {
       const existing = unionMap.get(f.fieldKey);
@@ -46,14 +66,12 @@ export const useEFormStore = defineStore('eform', () => {
         type: 'text' as const,
       };
       if (existing) {
-        // 任一 required → 聯集 required
         if (f.required) existing.required = true;
       } else {
         unionMap.set(f.fieldKey, { ...def, required: f.required });
       }
     }
 
-    // 按照 FIELD_DEF_MAP 中的順序輸出（未定義的排最後）
     const ORDER = Object.keys(FIELD_DEF_MAP);
     return [...unionMap.values()].sort((a, b) => {
       const ai = ORDER.indexOf(a.key);
@@ -62,70 +80,86 @@ export const useEFormStore = defineStore('eform', () => {
     });
   });
 
-  /** 取得指定模板物件 */
-  const getTemplate = computed(() => (templateId: string): EFormTemplate | undefined => {
-    for (const bt of businessTypes.value) {
-      const t = bt.templates.find((t) => t.id === templateId);
-      if (t) return t;
-    }
-  });
+  /** 是否還有下一頁（供無限滾動判斷） */
+  const hasMoreSessions = computed(
+    () => sessionPagination.value.page < sessionPagination.value.totalPages
+  );
 
   // Actions
 
-  /** 載入業務別清單 */
-  async function fetchBusinessTypes(): Promise<void> {
+  /** 載入指定業務別的模板清單 */
+  async function fetchTemplates(businessTypeId: string): Promise<void> {
     isLoading.value = true;
     try {
-      const res = await httpClient.get<EFormBusinessType[]>('/eform/business-types');
-      businessTypes.value = res.data;
+      const res = await getTemplates(businessTypeId);
+      // 合併而不覆蓋：保留其他業務別已載入的模板
+      const incoming = res.data;
+      const existingIds = new Set(templates.value.map((t) => t.id));
+      for (const t of incoming) {
+        if (!existingIds.has(t.id)) {
+          templates.value.push(t);
+        }
+      }
     } finally {
       isLoading.value = false;
     }
   }
 
-  /** 載入生成歷程 */
-  async function fetchSessions(): Promise<void> {
-    isLoading.value = true;
+  /** 初次載入歷程（覆蓋 sessions，重設分頁） */
+  async function fetchSessions(params: Omit<GetSessionsParams, 'page'>): Promise<void> {
+    isSessionLoading.value = true;
     try {
-      const res = await httpClient.get<{ items: FormSessionRecord[] }>('/eform/sessions');
-      sessions.value = res.data.items;
+      const res = await getSessions({ ...params, page: 1 });
+      const { items, ...pagination } = res.data;
+      sessions.value = items;
+      sessionPagination.value = pagination;
     } finally {
-      isLoading.value = false;
+      isSessionLoading.value = false;
     }
   }
 
-  /** 新增生成歷程（Mock：不呼叫 API） */
-  function addSession(payload: Omit<FormSessionRecord, 'id' | 'createdAt'>): FormSessionRecord {
-    const now = new Date().toLocaleString('zh-TW', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-    const record: FormSessionRecord = {
-      ...payload,
-      id: `S${String(sessions.value.length + 1).padStart(3, '0')}`,
-      createdAt: now,
-    };
-    sessions.value.unshift(record);
-    return record;
+  /** 載入下一頁歷程（追加到 sessions，供無限滾動） */
+  async function loadMoreSessions(params: Omit<GetSessionsParams, 'page'>): Promise<void> {
+    if (!hasMoreSessions.value || isSessionLoading.value) return;
+    isSessionLoading.value = true;
+    try {
+      const nextPage = sessionPagination.value.page + 1;
+      const res = await getSessions({ ...params, page: nextPage });
+      const { items, ...pagination } = res.data;
+      sessions.value.push(...items);
+      sessionPagination.value = pagination;
+    } finally {
+      isSessionLoading.value = false;
+    }
+  }
+
+  /** 批次生成 PDF，後端同時寫入 session */
+  async function generateBatchPdfs(payload: {
+    templateIds: string[];
+    businessTypeId: string;
+    businessTypeName: string;
+    applicantData: Record<string, string>;
+  }): Promise<GeneratePdfResult> {
+    const res = await generateBatch(payload);
+    return res.data;
   }
 
   return {
     // State
-    businessTypes,
+    templates,
     sessions,
+    sessionPagination,
     isLoading,
+    isSessionLoading,
     // Getters
-    getBusinessType,
-    getUnionFields,
+    templatesByBusinessType,
     getTemplate,
+    getUnionFields,
+    hasMoreSessions,
     // Actions
-    fetchBusinessTypes,
+    fetchTemplates,
     fetchSessions,
-    addSession,
+    loadMoreSessions,
+    generateBatchPdfs,
   };
 });

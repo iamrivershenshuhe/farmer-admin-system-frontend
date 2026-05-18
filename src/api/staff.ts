@@ -5,13 +5,8 @@
  * 目前皆為 stub，實際資料由 stores/staff.ts 提供
  */
 
-import type {
-  ApiResponse,
-  PaginationParams,
-  PaginationResponse,
-  UserInfo,
-  UserRole,
-} from '@/types';
+import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';
+import type { UserInfo, UserRole } from '@/types/user';
 import { httpClient } from '@/utils/request';
 
 // ---------------------------------------------------------------------------
@@ -55,16 +50,18 @@ export const createStaff = async (data: {
   name?: string;
   role: UserRole;
   department?: string;
+  departmentId?: string | null;
+  businessTypeIds?: string[];
   password: string;
   mustChangePassword?: boolean;
 }): Promise<ApiResponse<UserInfo>> => httpClient.post<UserInfo>('/staff', data);
 
 /**
- * 更新人員基本資料
+ * 更新人員基本資料（含部門 / 業務範圍）
  */
 export const updateStaff = async (
   id: string,
-  data: Partial<Pick<UserInfo, 'name' | 'department'>>
+  data: Partial<Pick<UserInfo, 'name' | 'department' | 'departmentId' | 'businessTypeIds'>>
 ): Promise<ApiResponse<UserInfo>> => httpClient.put<UserInfo>(`/staff/${id}`, data);
 
 /**
@@ -86,3 +83,18 @@ export const resetPassword = async (
  */
 export const deleteStaff = async (id: string): Promise<ApiResponse<void>> =>
   httpClient.delete<void>(`/staff/${id}`);
+
+// ---------------------------------------------------------------------------
+// 停用 / 啟用（軟刪除，可逆）+ 批次
+// ---------------------------------------------------------------------------
+
+export const setStaffActive = async (id: string, active: boolean): Promise<ApiResponse<UserInfo>> =>
+  httpClient.patch<UserInfo>(`/staff/${id}/active`, { active });
+
+export const batchSetStaffActive = async (
+  ids: string[],
+  active: boolean
+): Promise<ApiResponse<void>> => httpClient.post<void>('/staff/batch-active', { ids, active });
+
+export const batchDeleteStaff = async (ids: string[]): Promise<ApiResponse<void>> =>
+  httpClient.post<void>('/staff/batch-delete', { ids });

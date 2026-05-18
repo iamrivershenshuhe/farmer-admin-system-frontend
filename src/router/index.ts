@@ -113,13 +113,16 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'organization',
         component: () => import('@/views/organization/index.vue'),
-        redirect: '/organization/departments',
         meta: {
           title: '組織管理',
           activeModule: 'organization',
           requiresAuth: true,
         },
         children: [
+          {
+            path: '',
+            redirect: { name: 'organization-departments' },
+          },
           {
             path: 'departments',
             name: 'organization-departments',
@@ -129,8 +132,14 @@ const routes: RouteRecordRaw[] = [
           {
             path: 'staff',
             name: 'organization-staff',
-            component: () => import('@/views/staff/index.vue'),
-            meta: { title: '員工管理', activeModule: 'organization' },
+            component: () => import('@/views/organization/StaffTab.vue'),
+            meta: { title: '人員管理', activeModule: 'organization' },
+          },
+          {
+            path: 'business-types',
+            name: 'organization-business-types',
+            component: () => import('@/views/organization/BusinessTypesTab.vue'),
+            meta: { title: '業務別管理', activeModule: 'organization' },
           },
         ],
       },

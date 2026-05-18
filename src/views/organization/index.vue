@@ -14,6 +14,7 @@ const headerStore = useHeaderStore();
 onMounted(() => {
   headerStore.setTabs([
     { label: '部門管理', to: '/organization/departments' },
+    { label: '業務別管理', to: '/organization/business-types' },
     { label: '人員管理', to: '/organization/staff' },
   ]);
 });

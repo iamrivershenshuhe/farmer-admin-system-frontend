@@ -1,122 +1,135 @@
 import { http, HttpResponse } from 'msw';
 
-import type { BusinessType } from '@/types/department';
+import type { Department } from '@/types/department';
 
-import { assignedBusinessTypeIds, mockBusinessTypes, mockDepartments } from '../department';
+import { mockBusinessTypes, mockDepartments } from '../department';
+import { fail, ok, paginate, readPageQuery, sortList } from './_helpers';
+
+/** 部門是否被引用（有人員 / 業務別 / 知識庫文件）→ 守門硬刪除 */
+function isReferenced(dept: Department): boolean {
+  return (
+    dept.memberCount > 0 ||
+    (dept.knowledgeBaseCount ?? 0) > 0 ||
+    mockBusinessTypes.some((bt) => bt.departmentId === dept.id)
+  );
+}
 
 export const departmentHandlers = [
-  // 取得部門列表
-  http.get('*/api/v1/departments', () => {
-    return HttpResponse.json({
-      code: 0,
-      message: 'success',
-      data: {
-        items: mockDepartments,
-        total: mockDepartments.length,
-        page: 1,
-        pageSize: 10,
-        totalPages: 1,
-      },
-    });
+  // 部門列表（分頁／篩選／排序）
+  http.get('*/api/v1/departments', ({ request }) => {
+    const url = new URL(request.url);
+    const q = readPageQuery(url);
+    const keyword = url.searchParams.get('keyword')?.trim().toLowerCase();
+    const activeParam = url.searchParams.get('active');
+
+    let list = [...mockDepartments];
+    if (keyword) {
+      list = list.filter(
+        (d) => d.name.toLowerCase().includes(keyword) || d.code.toLowerCase().includes(keyword)
+      );
+    }
+    if (activeParam != null) list = list.filter((d) => d.active === (activeParam === 'true'));
+
+    list = sortList(list, q.sortBy ?? 'code', q.sortOrder ?? 'asc');
+    const page = paginate(list, q.page, q.pageSize);
+    const items = page.items.map((d) => ({
+      ...d,
+      businessTypeCount: mockBusinessTypes.filter((bt) => bt.departmentId === d.id).length,
+    }));
+    return HttpResponse.json(ok({ ...page, items }));
   }),
 
-  // 取得單一部門
+  // 單一部門
   http.get('*/api/v1/departments/:id', ({ params }) => {
     const department = mockDepartments.find((d) => d.id === params.id);
-    if (!department) {
-      return HttpResponse.json({
-        code: 20004,
-        message: '部門不存在',
-        data: null,
+    if (!department) return HttpResponse.json(fail(20004, '部門不存在'), { status: 404 });
+    return HttpResponse.json(ok(department));
+  }),
+
+  // 新增部門（部門代碼唯一校驗）
+  http.post('*/api/v1/departments', async ({ request }) => {
+    const body = (await request.json()) as Partial<Department>;
+    if (mockDepartments.some((d) => d.code === body.code)) {
+      return HttpResponse.json(fail(20003, '部門代碼已存在'), { status: 400 });
+    }
+    if (mockDepartments.some((d) => d.name === body.name)) {
+      return HttpResponse.json(fail(20003, '部門名稱已存在'), { status: 400 });
+    }
+    const newDept: Department = {
+      id: `DEPT${Date.now()}`,
+      code: body.code ?? '',
+      name: body.name ?? '',
+      managerName: body.managerName || undefined,
+      memberCount: 0,
+      knowledgeBaseCount: 0,
+      active: body.active ?? true,
+      createdAt: new Date().toISOString(),
+    };
+    mockDepartments.push(newDept);
+    return HttpResponse.json(ok(newDept, '部門建立成功'), { status: 201 });
+  }),
+
+  // 更新部門
+  http.put('*/api/v1/departments/:id', async ({ params, request }) => {
+    const body = (await request.json()) as Partial<Department>;
+    const idx = mockDepartments.findIndex((d) => d.id === params.id);
+    if (idx === -1) return HttpResponse.json(fail(20004, '部門不存在'), { status: 404 });
+    if (body.code && mockDepartments.some((d) => d.id !== params.id && d.code === body.code)) {
+      return HttpResponse.json(fail(20003, '部門代碼已存在'), { status: 400 });
+    }
+    mockDepartments[idx] = { ...mockDepartments[idx], ...body };
+    return HttpResponse.json(ok(mockDepartments[idx]));
+  }),
+
+  // 停用 / 啟用（軟刪除，可逆）
+  http.patch('*/api/v1/departments/:id/active', async ({ params, request }) => {
+    const { active } = (await request.json()) as { active: boolean };
+    const idx = mockDepartments.findIndex((d) => d.id === params.id);
+    if (idx === -1) return HttpResponse.json(fail(20004, '部門不存在'), { status: 404 });
+    mockDepartments[idx].active = active;
+    return HttpResponse.json(ok(mockDepartments[idx]));
+  }),
+
+  // 刪除部門（受守門）
+  http.delete('*/api/v1/departments/:id', ({ params }) => {
+    const idx = mockDepartments.findIndex((d) => d.id === params.id);
+    if (idx === -1) return HttpResponse.json(fail(20004, '部門不存在'), { status: 404 });
+    if (isReferenced(mockDepartments[idx])) {
+      return HttpResponse.json(
+        fail(20003, '此部門仍有人員 / 業務別 / 知識庫文件，無法刪除，請改用停用'),
+        { status: 400 }
+      );
+    }
+    mockDepartments.splice(idx, 1);
+    return HttpResponse.json(ok(null, '刪除成功'));
+  }),
+
+  // 批次停用 / 啟用
+  http.post('*/api/v1/departments/batch-active', async ({ request }) => {
+    const { ids, active } = (await request.json()) as { ids: string[]; active: boolean };
+    mockDepartments.forEach((d) => {
+      if (ids.includes(d.id)) d.active = active;
+    });
+    return HttpResponse.json(ok({ affected: ids.length }));
+  }),
+
+  // 批次刪除（受守門）
+  http.post('*/api/v1/departments/batch-delete', async ({ request }) => {
+    const { ids } = (await request.json()) as { ids: string[] };
+    const blocked = ids.filter((id) => {
+      const d = mockDepartments.find((x) => x.id === id);
+      return d ? isReferenced(d) : false;
+    });
+    const removable = ids.filter((id) => !blocked.includes(id));
+    for (const id of removable) {
+      const idx = mockDepartments.findIndex((d) => d.id === id);
+      if (idx !== -1) mockDepartments.splice(idx, 1);
+    }
+    if (blocked.length) {
+      return HttpResponse.json(fail(20003, `${blocked.length} 個部門仍被引用，無法刪除`), {
+        status: 400,
       });
     }
-    return HttpResponse.json({
-      code: 0,
-      message: 'success',
-      data: department,
-    });
-  }),
-
-  // 新增部門
-  http.post('*/api/v1/departments', async ({ request }) => {
-    const newDept = (await request.json()) as Record<string, unknown>;
-    return HttpResponse.json({
-      code: 0,
-      message: '部門建立成功',
-      data: {
-        ...newDept,
-        id: `DEPT${Math.floor(Math.random() * 1000)}`,
-        memberCount: 0,
-        knowledgeBaseCount: 0,
-        createdAt: new Date().toISOString(),
-      },
-    });
-  }),
-
-  // 取得部門的業務別列表
-  http.get('*/api/v1/departments/:id/business-types', async ({ params }) => {
-    await new Promise((r) => setTimeout(r, 200));
-    const items = mockBusinessTypes.filter((bt) => bt.departmentId === params.id);
-    return HttpResponse.json({ code: 0, message: 'success', data: { items } });
-  }),
-
-  // 新增業務別
-  http.post('*/api/v1/departments/:id/business-types', async ({ params, request }) => {
-    const body = (await request.json()) as {
-      name?: string;
-      description?: string;
-      active?: boolean;
-    };
-    const deptId = params.id as string;
-    const duplicate = mockBusinessTypes.some(
-      (bt) => bt.departmentId === deptId && bt.name === body.name
-    );
-    if (duplicate) {
-      return HttpResponse.json(
-        { code: 20003, message: '業務別名稱在此部門已存在', data: null },
-        { status: 400 }
-      );
-    }
-    const newBt: BusinessType = {
-      id: `BT${Date.now()}`,
-      departmentId: deptId,
-      name: body.name ?? '',
-      description: body.description,
-      active: body.active ?? true,
-    };
-    mockBusinessTypes.push(newBt);
-    return HttpResponse.json({ code: 0, message: '業務別建立成功', data: newBt }, { status: 201 });
-  }),
-
-  // 更新業務別
-  http.put('*/api/v1/business-types/:id', async ({ params, request }) => {
-    const body = (await request.json()) as {
-      name?: string;
-      description?: string;
-      active?: boolean;
-    };
-    const idx = mockBusinessTypes.findIndex((bt) => bt.id === params.id);
-    if (idx === -1) {
-      return HttpResponse.json(
-        { code: 20004, message: '業務別不存在', data: null },
-        { status: 404 }
-      );
-    }
-    mockBusinessTypes[idx] = { ...mockBusinessTypes[idx], ...body };
-    return HttpResponse.json({ code: 0, message: 'success', data: mockBusinessTypes[idx] });
-  }),
-
-  // 刪除業務別
-  http.delete('*/api/v1/business-types/:id', ({ params }) => {
-    const btId = params.id as string;
-    if (assignedBusinessTypeIds.has(btId)) {
-      return HttpResponse.json(
-        { code: 20003, message: '仍有人員使用此業務別，無法刪除', data: null },
-        { status: 400 }
-      );
-    }
-    const idx = mockBusinessTypes.findIndex((bt) => bt.id === btId);
-    if (idx !== -1) mockBusinessTypes.splice(idx, 1);
-    return HttpResponse.json({ code: 0, message: '刪除成功', data: null });
+    return HttpResponse.json(ok({ removed: removable.length }, '刪除成功'));
   }),
 ];

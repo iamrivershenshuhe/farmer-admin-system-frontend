@@ -1,123 +1,200 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
-import type { UserFormData, UserInfo, UserRole } from '@/types';
-import { httpClient } from '@/utils/request';
+import {
+  batchDeleteStaff,
+  batchSetStaffActive,
+  createStaff as apiCreate,
+  deleteStaff as apiDelete,
+  getManagers,
+  getStaff,
+  resetPassword as apiResetPassword,
+  setStaffActive,
+  updateStaff as apiUpdate,
+  updateStaffRole as apiUpdateRole,
+} from '@/api/staff';
+import type { UserInfo, UserRole } from '@/types/user';
 
+interface Filters {
+  keyword?: string;
+  department?: string;
+  role?: UserRole;
+  active?: boolean;
+  sortBy: string;
+  sortOrder: 'asc' | 'desc';
+}
+
+const DEFAULT_FILTERS: Filters = {
+  keyword: undefined,
+  department: undefined,
+  role: undefined,
+  active: undefined,
+  sortBy: 'username',
+  sortOrder: 'asc',
+};
+
+type CreatePayload = Parameters<typeof apiCreate>[0];
+type UpdatePayload = Parameters<typeof apiUpdate>[1];
+
+/**
+ * 人員狀態 — 薄層，server 驅動（對齊 stores/knowledge.ts）。
+ *
+ * - `users`：完整清單，供電子表單等模組查詢（向後相容）
+ * - `list` 等：人員管理 tab 的分頁／篩選／排序結果
+ */
 export const useStaffStore = defineStore('staff', () => {
-  // State
+  // ── 向後相容：完整清單 ─────────────────────────────────────
   const users = ref<UserInfo[]>([]);
   const isLoading = ref(false);
+  const managers = ref<UserInfo[]>([]);
 
-  // Getters
-  const managers = computed(() =>
-    users.value.filter((u) => (u.role === 'manager' || u.role === 'admin') && u.active)
-  );
+  const getUserById = (id: string) => users.value.find((u) => u.id === id);
+  const getUserByUsername = (username: string) => users.value.find((u) => u.username === username);
+  const getUsersByDepartment = (department: string) =>
+    users.value.filter((u) => u.department === department);
 
-  const getUsersByDepartment = (department: string) => {
-    return users.value.filter((u) => u.department === department);
-  };
-
-  const getUserById = (id: string) => {
-    return users.value.find((u) => u.id === id);
-  };
-
-  const getUserByUsername = (username: string) => {
-    return users.value.find((u) => u.username === username);
-  };
-
-  // Actions
-  async function fetchStaff() {
+  async function fetchStaff(): Promise<void> {
     isLoading.value = true;
     try {
-      const res = await httpClient.get<{ items: UserInfo[] }>('/staff');
+      const res = await getStaff({ page: 1, pageSize: 999 });
       users.value = res.data.items;
     } finally {
       isLoading.value = false;
     }
   }
 
-  function addUser(formData: UserFormData) {
-    const newUser: UserInfo = {
-      id: `USER${String(users.value.length + 1).padStart(3, '0')}`,
-      username: formData.username ?? '',
-      name: formData.name,
-      role: formData.role,
-      department: formData.department || '',
-      active: true,
-      mustChangePassword: formData.mustChangePassword,
-      createdAt: new Date().toLocaleString('zh-TW', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }),
-      lastLoginAt: undefined,
-    };
-    users.value.push(newUser);
-    return newUser;
+  async function fetchManagers(): Promise<void> {
+    const res = await getManagers();
+    managers.value = res.data;
   }
 
-  function updateUser(id: string, formData: UserFormData) {
-    const index = users.value.findIndex((u) => u.id === id);
-    if (index !== -1) {
-      users.value[index] = {
-        ...users.value[index],
-        name: formData.name,
-        role: formData.role,
-        department: formData.department || '',
-      };
-      return users.value[index];
+  // ── 人員管理 tab：server 驅動 ──────────────────────────────
+  const list = ref<UserInfo[]>([]);
+  const total = ref(0);
+  const currentPage = ref(1);
+  const pageSize = ref(20);
+  const totalPages = ref(1);
+  const isListLoading = ref(false);
+  const filters = ref<Filters>({ ...DEFAULT_FILTERS });
+
+  const startIndex = computed(() =>
+    total.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
+  );
+  const endIndex = computed(() => Math.min(currentPage.value * pageSize.value, total.value));
+
+  async function fetchList(): Promise<void> {
+    isListLoading.value = true;
+    try {
+      const res = await getStaff({
+        page: currentPage.value,
+        pageSize: pageSize.value,
+        ...filters.value,
+      });
+      const d = res.data;
+      list.value = d.items;
+      total.value = d.total;
+      currentPage.value = d.page;
+      pageSize.value = d.pageSize;
+      totalPages.value = d.totalPages;
+    } finally {
+      isListLoading.value = false;
     }
-    return null;
   }
 
-  function updateUserRole(id: string, newRole: UserRole) {
-    const index = users.value.findIndex((u) => u.id === id);
-    if (index !== -1) {
-      users.value[index].role = newRole;
-      return users.value[index];
-    }
-    return null;
+  function setPage(page: number): Promise<void> {
+    currentPage.value = page;
+    return fetchList();
+  }
+  function setPageSize(size: number): Promise<void> {
+    pageSize.value = size;
+    currentPage.value = 1;
+    return fetchList();
+  }
+  function setFilters(patch: Partial<Filters>): Promise<void> {
+    filters.value = { ...filters.value, ...patch };
+    currentPage.value = 1;
+    return fetchList();
+  }
+  function setSort(sortBy: string): Promise<void> {
+    const order =
+      filters.value.sortBy === sortBy && filters.value.sortOrder === 'asc' ? 'desc' : 'asc';
+    return setFilters({ sortBy, sortOrder: order });
+  }
+  function resetFilters(): Promise<void> {
+    filters.value = { ...DEFAULT_FILTERS };
+    currentPage.value = 1;
+    return fetchList();
   }
 
-  function resetUserPassword(id: string, mustChange: boolean) {
-    const index = users.value.findIndex((u) => u.id === id);
-    if (index !== -1) {
-      users.value[index].mustChangePassword = mustChange;
-      return users.value[index];
-    }
-    return null;
+  async function createStaff(data: CreatePayload): Promise<void> {
+    await apiCreate(data);
+    await fetchList();
   }
-
-  function deleteUser(id: string) {
-    const index = users.value.findIndex((u) => u.id === id);
-    if (index !== -1) {
-      const deleted = users.value[index];
-      users.value.splice(index, 1);
-      return deleted;
-    }
-    return null;
+  async function updateStaff(id: string, data: UpdatePayload): Promise<void> {
+    await apiUpdate(id, data);
+    await fetchList();
+  }
+  async function updateStaffRole(id: string, role: UserRole): Promise<void> {
+    await apiUpdateRole(id, role);
+    await fetchList();
+  }
+  async function resetPassword(
+    id: string,
+    payload: { newPassword: string; mustChangePassword: boolean }
+  ): Promise<void> {
+    await apiResetPassword(id, payload);
+  }
+  /** 受守門硬刪除：仍啟用時 httpClient reject，由 view 接住顯示 inline */
+  async function deleteStaff(id: string): Promise<void> {
+    await apiDelete(id);
+    await fetchList();
+  }
+  async function setActive(id: string, active: boolean): Promise<void> {
+    await setStaffActive(id, active);
+    await fetchList();
+  }
+  async function batchSetActive(ids: string[], active: boolean): Promise<void> {
+    await batchSetStaffActive(ids, active);
+    await fetchList();
+  }
+  async function batchDelete(ids: string[]): Promise<void> {
+    await batchDeleteStaff(ids);
+    await fetchList();
   }
 
   return {
-    // State
+    // 向後相容
     users,
     isLoading,
-    // Getters
     managers,
-    getUsersByDepartment,
     getUserById,
     getUserByUsername,
-    // Actions
+    getUsersByDepartment,
     fetchStaff,
-    addUser,
-    updateUser,
-    updateUserRole,
-    resetUserPassword,
-    deleteUser,
+    fetchManagers,
+    // server 驅動 tab
+    list,
+    total,
+    currentPage,
+    pageSize,
+    totalPages,
+    isListLoading,
+    filters,
+    startIndex,
+    endIndex,
+    fetchList,
+    setPage,
+    setPageSize,
+    setFilters,
+    setSort,
+    resetFilters,
+    createStaff,
+    updateStaff,
+    updateStaffRole,
+    resetPassword,
+    deleteStaff,
+    setActive,
+    batchSetActive,
+    batchDelete,
   };
 });

@@ -5,13 +5,8 @@
  * 目前皆為 stub，實際資料由 stores/department.ts 提供
  */
 
-import type {
-  ApiResponse,
-  Department,
-  DepartmentFormData,
-  PaginationParams,
-  PaginationResponse,
-} from '@/types';
+import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';
+import type { Department, DepartmentFormData } from '@/types/department';
 import { httpClient } from '@/utils/request';
 
 // ---------------------------------------------------------------------------
@@ -31,12 +26,6 @@ export const getDepartments = async (
  */
 export const getDepartment = async (id: string): Promise<ApiResponse<Department>> =>
   httpClient.get<Department>(`/departments/${id}`);
-
-/**
- * 取得所有啟用中的部門（供下拉選單使用，不分頁）
- */
-export const getActiveDepartments = async (): Promise<ApiResponse<Department[]>> =>
-  httpClient.get<Department[]>('/departments', { params: { active: true, pageSize: 999 } });
 
 // ---------------------------------------------------------------------------
 // 新增 / 更新 / 刪除
@@ -62,3 +51,22 @@ export const updateDepartment = async (
  */
 export const deleteDepartment = async (id: string): Promise<ApiResponse<void>> =>
   httpClient.delete<void>(`/departments/${id}`);
+
+// ---------------------------------------------------------------------------
+// 停用 / 啟用（軟刪除，可逆）+ 批次
+// ---------------------------------------------------------------------------
+
+export const setDepartmentActive = async (
+  id: string,
+  active: boolean
+): Promise<ApiResponse<Department>> =>
+  httpClient.patch<Department>(`/departments/${id}/active`, { active });
+
+export const batchSetDepartmentActive = async (
+  ids: string[],
+  active: boolean
+): Promise<ApiResponse<void>> =>
+  httpClient.post<void>('/departments/batch-active', { ids, active });
+
+export const batchDeleteDepartments = async (ids: string[]): Promise<ApiResponse<void>> =>
+  httpClient.post<void>('/departments/batch-delete', { ids });

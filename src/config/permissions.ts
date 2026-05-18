@@ -155,12 +155,13 @@ export const FEATURE_PERMISSIONS: Record<string, Record<UserRole, FeaturePermiss
       canManage: true,
       scope: 'all',
     },
+    // 依角色表：人員管理 manager 為唯讀（增修/變更角色/重設密碼/指派業務範圍皆 admin only）
     manager: {
       canView: true,
-      canCreate: true,
-      canEdit: true,
+      canCreate: false,
+      canEdit: false,
       canDelete: false,
-      canManage: true,
+      canManage: false,
       scope: 'department',
     },
     user: {

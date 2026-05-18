@@ -20,37 +20,18 @@
     </div>
 
     <div class="fields-grid">
-      <div v-for="field in unionFields" :key="field.key" class="field-group">
-        <label :for="`field-${field.key}`" class="field-label">
-          {{ field.label }}
-          <span v-if="field.required" class="required-mark">*</span>
-        </label>
-        <input
-          :id="`field-${field.key}`"
-          :type="inputType(field.type)"
-          :placeholder="placeholder(field)"
-          :value="modelValue[field.key] ?? ''"
-          :required="field.required"
-          class="field-input"
-          :class="{ 'field-error': fieldError(field.key) }"
-          @input="onInput(field.key, ($event.target as HTMLInputElement).value)"
-          @blur="onBlur(field.key)"
-        />
-        <!-- 驗證錯誤訊息 -->
-        <Transition name="err-fade">
-          <span v-if="fieldError(field.key)" class="error-msg">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="err-icon">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            {{ fieldError(field.key) }}
-          </span>
-        </Transition>
-      </div>
+      <BaseInput
+        v-for="field in unionFields"
+        :key="field.key"
+        :model-value="modelValue[field.key] ?? ''"
+        :type="inputType(field.type)"
+        :label="field.label"
+        :required="field.required"
+        :placeholder="placeholder(field)"
+        :error="fieldError(field.key)"
+        @update:model-value="onInput(field.key, $event)"
+        @blur="onBlur(field.key)"
+      />
     </div>
 
     <div class="form-note">
@@ -70,17 +51,22 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
+import BaseInput from '@/components/base/BaseInput.vue';
 import type { ApplicantFieldDef } from '@/types/form';
 
-const props = defineProps<{
+interface Props {
   unionFields: ApplicantFieldDef[];
   modelValue: Record<string, string>;
   selectedCount: number;
   showErrors?: boolean;
-}>();
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  showErrors: false,
+});
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', val: Record<string, string>): void;
+  'update:modelValue': [val: Record<string, string>];
 }>();
 
 // 追蹤已觸碰過的欄位（blur 後才顯示錯誤，避免使用者還沒輸入就出現紅字）
@@ -158,7 +144,7 @@ function fieldError(key: string): string {
 }
 
 // 輸入時：自動大寫身分證首字母，然後 emit
-function onInput(key: string, raw: string) {
+function onInput(key: string, raw: string): void {
   let value = raw;
   if (key === 'applicant_id_number' && value.length >= 1) {
     // 自動將首字母轉大寫
@@ -168,11 +154,11 @@ function onInput(key: string, raw: string) {
 }
 
 // Blur 時標記為已觸碰
-function onBlur(key: string) {
+function onBlur(key: string): void {
   touchedFields.value.add(key);
 }
 
-function inputType(type: ApplicantFieldDef['type']): string {
+function inputType(type: ApplicantFieldDef['type']): 'text' | 'tel' | 'date' {
   if (type === 'date') return 'date';
   if (type === 'tel') return 'tel';
   return 'text';
@@ -203,9 +189,9 @@ function placeholder(field: ApplicantFieldDef): string {
 /* Header */
 .form-header {
   padding: 1rem 1.25rem;
-  background: color-mix(in srgb, var(--accent) 6%, var(--bg-1));
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-  border-radius: 0.625rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
 }
 
 .form-header-info {
@@ -241,62 +227,6 @@ function placeholder(field: ApplicantFieldDef): string {
   gap: 1.25rem 1.5rem;
 }
 
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.field-label {
-  display: flex;
-  gap: 0.2rem;
-  align-items: center;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.required-mark {
-  font-size: 0.875rem;
-  color: var(--error);
-}
-
-.field-input {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 0.9375rem;
-  color: var(--text);
-  outline: none;
-  background: var(--bg-hover);
-  border: 1.5px solid var(--border);
-  border-radius: 0.5rem;
-}
-
-.field-input:focus {
-  border-color: var(--accent);
-  transition: border-color 0.2s ease;
-}
-
-.field-input.field-error {
-  border-color: var(--error);
-}
-
-/* 錯誤訊息 */
-.error-msg {
-  display: flex;
-  gap: 0.3rem;
-  align-items: center;
-  margin-top: 0.1rem;
-  font-size: 0.75rem;
-  color: var(--error);
-}
-
-.err-icon {
-  flex-shrink: 0;
-  width: 0.875rem;
-  height: 0.875rem;
-}
-
 /* Note */
 .form-note {
   display: flex;
@@ -306,7 +236,7 @@ function placeholder(field: ApplicantFieldDef): string {
   font-size: 0.8125rem;
   color: var(--text-2);
   background: var(--bg-hover);
-  border-radius: 0.5rem;
+  border-radius: var(--r-md);
 }
 
 .note-icon {
@@ -318,19 +248,5 @@ function placeholder(field: ApplicantFieldDef): string {
 .req-inline {
   font-weight: 600;
   color: var(--error);
-}
-
-/* 錯誤訊息淡入淡出 */
-.err-fade-enter-active,
-.err-fade-leave-active {
-  transition:
-    opacity 0.2s ease,
-    transform 0.2s ease;
-}
-
-.err-fade-enter-from,
-.err-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
 }
 </style>

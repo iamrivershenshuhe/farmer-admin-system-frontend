@@ -1,11 +1,9 @@
 <template>
-  <!-- 觸發按鈕（固定在右上方，由父層呼叫） -->
-  <!-- 側邊抽屜 -->
   <Teleport to="body">
     <Transition name="drawer">
       <div v-if="isOpen" class="drawer-overlay" @click.self="close">
         <div class="drawer-panel">
-          <!-- 標頭 -->
+          <!-- 標頭（固定） -->
           <div class="drawer-header">
             <div class="drawer-title-wrap">
               <svg class="title-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -18,21 +16,35 @@
               </svg>
               <h3 class="drawer-title">生成歷程</h3>
             </div>
-            <button class="drawer-close" @click="close">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="close-icon">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
+            <IconBtn icon="CLOSE" variant="ghost" size="sm" aria-label="關閉歷程" @click="close" />
           </div>
 
-          <!-- 歷程列表 -->
-          <div class="drawer-body">
-            <div v-if="sessions.length === 0" class="empty-state">
+          <!-- 篩選列（固定；manager 可選帳號、admin 可選部門+帳號） -->
+          <div v-if="isAdmin || isManager" class="drawer-filters">
+            <FilterSelect
+              v-if="isAdmin"
+              v-model="filterDeptId"
+              :options="deptFilterOptions"
+              placeholder="全部部門"
+              size="md"
+              @update:model-value="onFilterChange"
+            />
+            <FilterSelect
+              v-model="filterCreatedById"
+              class="filter-account"
+              :options="accountFilterOptions"
+              placeholder="全部帳號"
+              size="md"
+              @update:model-value="onFilterChange"
+            />
+          </div>
+
+          <!-- 列表區（可滾動；sentinel 觸發無限滾動） -->
+          <div ref="listRef" class="drawer-body">
+            <div
+              v-if="eformStore.sessions.length === 0 && !eformStore.isSessionLoading"
+              class="empty-state"
+            >
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="empty-icon">
                 <path
                   stroke-linecap="round"
@@ -44,99 +56,59 @@
               <span>尚無生成歷程</span>
             </div>
 
-            <div v-else class="session-list">
-              <div
-                v-for="session in sessions"
-                :key="session.id"
-                class="session-card"
-                :class="{ expanded: expandedId === session.id }"
-                @click="toggleExpand(session.id)"
-              >
-                <!-- 摘要列 -->
-                <div class="session-summary">
-                  <div class="session-left">
+            <!-- 手風琴列表 -->
+            <Accordion v-else :items="eformStore.sessions" :multiple="true">
+              <template #header="{ item: session }">
+                <div class="session-header">
+                  <div class="session-header-left">
                     <div class="session-business">{{ session.businessTypeName }}</div>
                     <div class="session-meta">
-                      <span class="meta-item">
-                        <svg
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          class="meta-icon"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                          />
-                        </svg>
-                        {{ session.templateIds.length }} 張表單
-                      </span>
+                      <span class="meta-item">{{ session.generatedFiles.length }} 張表單</span>
                       <span class="meta-dot">·</span>
-                      <span class="meta-item">
-                        <svg
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          class="meta-icon"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                          />
-                        </svg>
-                        {{ session.createdBy }}
-                      </span>
+                      <span class="meta-item">{{ session.createdBy }}</span>
                     </div>
                   </div>
-                  <div class="session-right">
-                    <span class="session-time">{{ formatTime(session.createdAt) }}</span>
-                    <svg
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      class="chevron-icon"
-                      :class="{ rotated: expandedId === session.id }"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
+                  <div class="session-header-right">
+                    <span class="session-time">{{ formatDate(session.createdAt) }}</span>
+                    <!-- Accordion 元件已在右側渲染 chevron；此處不重複 -->
                   </div>
                 </div>
+              </template>
 
-                <!-- 展開詳情 -->
-                <Transition name="expand">
-                  <div v-if="expandedId === session.id" class="session-detail">
-                    <div class="detail-label">使用表單：</div>
-                    <div class="detail-templates">
-                      <span v-for="name in session.templateNames" :key="name" class="tmpl-chip">
-                        <svg
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          class="chip-icon"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                          />
-                        </svg>
-                        {{ name }}
-                      </span>
-                    </div>
-                    <div class="detail-time">生成時間：{{ session.createdAt }}</div>
+              <template #body="{ item: session }">
+                <div class="session-files">
+                  <div
+                    v-for="file in session.generatedFiles"
+                    :key="file.templateId"
+                    class="session-file-row"
+                  >
+                    <FileTypeBadge label="PDF" />
+                    <span class="file-name">{{ file.filename }}</span>
                   </div>
-                </Transition>
-              </div>
+                </div>
+              </template>
+            </Accordion>
+
+            <!-- 無限滾動 sentinel -->
+            <div ref="sentinelRef" class="sentinel" />
+
+            <!-- 底部載入指示 -->
+            <div v-if="eformStore.isSessionLoading" class="loading-indicator">
+              <span class="loading-dot" />
+              <span class="loading-dot" />
+              <span class="loading-dot" />
+            </div>
+
+            <!-- 已全部載入提示 -->
+            <div
+              v-if="
+                !eformStore.hasMoreSessions &&
+                eformStore.sessions.length > 0 &&
+                !eformStore.isSessionLoading
+              "
+              class="all-loaded"
+            >
+              已顯示全部 {{ eformStore.sessions.length }} 筆歷程
             </div>
           </div>
         </div>
@@ -146,36 +118,161 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
-import type { FormSessionRecord } from '@/types/form';
+import type { GetSessionsParams } from '@/api/form';
+import IconBtn from '@/components/base/IconBtn.vue';
+import Accordion from '@/components/common/Accordion.vue';
+import FileTypeBadge from '@/components/common/FileTypeBadge.vue';
+import FilterSelect from '@/components/common/FilterSelect.vue';
+import { useDepartmentStore } from '@/stores/department';
+import { useEFormStore } from '@/stores/eform';
+import { useStaffStore } from '@/stores/staff';
 
-defineProps<{
+interface Props {
   isOpen: boolean;
-  sessions: FormSessionRecord[];
-}>();
+  /** 是否為 admin */
+  isAdmin: boolean;
+  /** 是否為 manager */
+  isManager: boolean;
+  /** 使用者部門 ID（manager 篩選鎖定） */
+  userDepartmentId: string | null;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  userDepartmentId: null,
+});
 
 const emit = defineEmits<{
   (e: 'close'): void;
 }>();
 
-const expandedId = ref<string | null>(null);
+const eformStore = useEFormStore();
+const departmentStore = useDepartmentStore();
+const staffStore = useStaffStore();
 
-function close() {
+const activeDepartments = departmentStore.activeDepartments;
+
+// 部門篩選選項（FilterSelect 格式）
+const deptFilterOptions = computed(() =>
+  activeDepartments.map((d) => ({ value: d.id, label: d.name }))
+);
+
+// 篩選狀態（僅 admin/manager 顯示）
+const filterDeptId = ref(props.isAdmin ? '' : (props.userDepartmentId ?? ''));
+const filterCreatedById = ref('');
+
+// 帳號篩選選項：依角色 scope（admin 可依所選部門收斂、否則全部；manager 僅本部門）
+const accountFilterOptions = computed(() => {
+  const scopeDeptId = props.isAdmin ? filterDeptId.value : props.userDepartmentId;
+  return staffStore.users
+    .filter((u) => !scopeDeptId || u.departmentId === scopeDeptId)
+    .map((u) => ({ value: u.id, label: u.name || u.username }));
+});
+
+// 滾動容器（IntersectionObserver root）與 sentinel ref（觸發點）
+const listRef = ref<HTMLElement | null>(null);
+const sentinelRef = ref<HTMLElement | null>(null);
+
+// 歷程每頁筆數（無限滾動批次大小）
+const SESSION_PAGE_SIZE = 10;
+
+// ── 組合查詢參數 ──────────────────────────────────────────
+
+function buildParams(): Omit<GetSessionsParams, 'page'> {
+  const params: Omit<GetSessionsParams, 'page'> = { pageSize: SESSION_PAGE_SIZE };
+  if (filterDeptId.value) params.departmentId = filterDeptId.value;
+  if (filterCreatedById.value.trim()) params.createdById = filterCreatedById.value.trim();
+  return params;
+}
+
+// ── 開啟抽屜時載入第一頁 ─────────────────────────────────
+
+watch(
+  () => props.isOpen,
+  async (open) => {
+    if (open) {
+      if (staffStore.users.length === 0) await staffStore.fetchStaff();
+      await eformStore.fetchSessions(buildParams());
+      // 開啟後掛載 sentinel observer
+      setupObserver();
+    } else {
+      teardownObserver();
+    }
+  }
+);
+
+// ── 篩選變更：重新載入 ────────────────────────────────────
+
+let filterTimer: ReturnType<typeof setTimeout> | null = null;
+
+function onFilterChange(): void {
+  if (filterTimer) clearTimeout(filterTimer);
+  // 簡單 debounce：300ms 後才發請求
+  filterTimer = setTimeout(async () => {
+    await eformStore.fetchSessions(buildParams());
+  }, 300);
+}
+
+// ── IntersectionObserver（無限滾動 sentinel） ──────────────
+
+let observer: IntersectionObserver | null = null;
+
+function setupObserver(): void {
+  if (observer) return;
+  observer = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0];
+      if (entry?.isIntersecting && eformStore.hasMoreSessions && !eformStore.isSessionLoading) {
+        eformStore.loadMoreSessions(buildParams());
+      }
+    },
+    { root: listRef.value, threshold: 0.1 }
+  );
+  if (sentinelRef.value) {
+    observer.observe(sentinelRef.value);
+  }
+}
+
+function teardownObserver(): void {
+  observer?.disconnect();
+  observer = null;
+}
+
+// sentinel DOM 就緒後需重新 observe（Teleport 延遲渲染）
+watch(sentinelRef, (el) => {
+  if (el && observer) {
+    observer.observe(el);
+  }
+});
+
+onBeforeUnmount(() => {
+  teardownObserver();
+  if (filterTimer) clearTimeout(filterTimer);
+});
+
+// ── 工具 ─────────────────────────────────────────────────
+
+function close(): void {
   emit('close');
 }
 
-function toggleExpand(id: string) {
-  expandedId.value = expandedId.value === id ? null : id;
-}
-
-function formatTime(dateStr: string): string {
-  // 只顯示日期部分
-  return dateStr.split(' ')[0] ?? dateStr;
+function formatDate(dateStr: string): string {
+  // 顯示 yyyy/MM/dd 部分
+  try {
+    return new Date(dateStr).toLocaleDateString('zh-TW', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  } catch {
+    return dateStr.split(' ')[0] ?? dateStr;
+  }
 }
 </script>
 
 <style scoped>
+/* 外框無圓角、左側分隔線、滿版高度 */
 .drawer-overlay {
   position: fixed;
   inset: 0;
@@ -189,15 +286,16 @@ function formatTime(dateStr: string): string {
 .drawer-panel {
   display: flex;
   flex-direction: column;
-  width: 360px;
-  max-width: 90vw;
+  width: 400px;
+  max-width: 92vw;
   height: 100%;
   background: var(--bg-1);
   border-left: 1px solid var(--border);
-  box-shadow: -8px 0 32px rgb(0 0 0 / 25%);
+  border-radius: 0; /* 無圓角 */
+  box-shadow: var(--shadow-3);
 }
 
-/* 標頭 */
+/* 標頭（固定） */
 .drawer-header {
   display: flex;
   flex-shrink: 0;
@@ -216,7 +314,9 @@ function formatTime(dateStr: string): string {
 .title-icon {
   width: 1.25rem;
   height: 1.25rem;
-  color: var(--accent);
+
+  /* 改為與標題同色（深色主題即為白色），不再用主色綠 */
+  color: var(--text);
 }
 
 .drawer-title {
@@ -226,36 +326,50 @@ function formatTime(dateStr: string): string {
   color: var(--text);
 }
 
-.drawer-close {
-  padding: 0.4rem;
-  color: var(--text-2);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: 0.375rem;
+/* 篩選列（固定） */
+.drawer-filters {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
 }
 
-.drawer-close:hover {
-  color: var(--text);
-  background: var(--bg-hover);
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+.drawer-filters :deep(.filter-select) {
+  flex: 1;
+  min-width: 120px;
 }
 
-.close-icon {
-  width: 1.25rem;
-  height: 1.25rem;
+.filter-account {
+  flex: 1;
+  min-width: 120px;
 }
 
-/* Body */
+/* 列表區（唯一滾動區） */
 .drawer-body {
   flex: 1;
   padding: 1rem;
   overflow-y: auto;
 }
 
-/* Empty */
+/* 抽屜內手風琴改為帶邊框圓角卡片 + 間距（對齊 mockup .ef-acc） */
+.drawer-body :deep(.accordion-item) {
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.drawer-body :deep(.accordion-item:first-child) {
+  border-top: 1px solid var(--border);
+}
+
+.drawer-body :deep(.accordion-body) {
+  border-top: 1px solid var(--border);
+}
+
+/* 空狀態 */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -272,50 +386,30 @@ function formatTime(dateStr: string): string {
   opacity: 0.4;
 }
 
-/* 歷程列表 */
-.session-list {
+/* Accordion 內 session header */
+.session-header {
   display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-}
-
-.session-card {
-  overflow: hidden;
-  cursor: pointer;
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
-  border-radius: 0.625rem;
-}
-
-.session-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  transition: border-color 0.2s ease;
-}
-
-.session-card.expanded {
-  border-color: var(--accent);
-}
-
-.session-summary {
-  display: flex;
-  gap: 0.75rem;
+  flex: 1;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 0.875rem 1rem;
+  min-width: 0;
 }
 
-.session-left {
+.session-header-left {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.3rem;
   min-width: 0;
 }
 
 .session-business {
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text);
+  white-space: nowrap;
 }
 
 .session-meta {
@@ -326,16 +420,8 @@ function formatTime(dateStr: string): string {
 }
 
 .meta-item {
-  display: flex;
-  gap: 0.25rem;
-  align-items: center;
   font-size: 0.8rem;
   color: var(--text-2);
-}
-
-.meta-icon {
-  width: 0.875rem;
-  height: 0.875rem;
 }
 
 .meta-dot {
@@ -343,12 +429,9 @@ function formatTime(dateStr: string): string {
   color: var(--border);
 }
 
-.session-right {
-  display: flex;
+.session-header-right {
   flex-shrink: 0;
-  flex-direction: column;
-  gap: 0.375rem;
-  align-items: flex-end;
+  padding-left: 0.5rem;
 }
 
 .session-time {
@@ -357,59 +440,81 @@ function formatTime(dateStr: string): string {
   white-space: nowrap;
 }
 
-.chevron-icon {
-  width: 1rem;
-  height: 1rem;
-  color: var(--text-2);
-  transition: transform 0.25s ease;
-}
-
-.rotated {
-  transform: rotate(180deg);
-}
-
-/* 展開詳情 */
-.session-detail {
+/* 展開的檔案列表 */
+.session-files {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0 1rem 0.875rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
-}
-
-.detail-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
-.detail-templates {
-  display: flex;
-  flex-wrap: wrap;
   gap: 0.375rem;
 }
 
-.tmpl-chip {
+.session-file-row {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.5rem;
   align-items: center;
-  padding: 0.25rem 0.625rem;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border-radius: 1rem;
+  padding: 0.5rem 0;
 }
 
-.chip-icon {
-  width: 0.8125rem;
-  height: 0.8125rem;
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.8125rem;
+  color: var(--text);
+  white-space: nowrap;
 }
 
-.detail-time {
+/* 無限滾動 sentinel */
+.sentinel {
+  height: 1px;
+}
+
+/* 載入指示（三點） */
+.loading-indicator {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.loading-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: dot-bounce 1.2s ease-in-out infinite;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dot-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.7);
+  }
+
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 已全部載入 */
+.all-loaded {
+  padding: 0.75rem 1rem;
   font-size: 0.8rem;
   color: var(--text-2);
+  text-align: center;
 }
 
 /* 抽屜動畫 */
@@ -431,25 +536,5 @@ function formatTime(dateStr: string): string {
 .drawer-enter-from .drawer-panel,
 .drawer-leave-to .drawer-panel {
   transform: translateX(100%);
-}
-
-/* 展開動畫 */
-.expand-enter-active,
-.expand-leave-active {
-  overflow: hidden;
-  transition:
-    opacity 0.25s ease,
-    max-height 0.25s ease;
-}
-
-.expand-enter-from,
-.expand-leave-to {
-  max-height: 0;
-  opacity: 0;
-}
-
-.expand-enter-to,
-.expand-leave-from {
-  max-height: 200px;
 }
 </style>

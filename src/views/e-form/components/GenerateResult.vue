@@ -1,6 +1,6 @@
 <template>
   <div class="generate-result">
-    <!-- 成功動畫區塊 -->
+    <!-- 成功橫幅 -->
     <div class="success-banner">
       <div class="success-icon-wrap">
         <svg class="success-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -15,13 +15,13 @@
       <div>
         <p class="success-title">表單已生成完成</p>
         <p class="success-sub">
-          共生成 {{ templates.length }} 份表單 ·
+          共生成 {{ generatedFiles.length }} 份表單 ·
           <span class="business-badge">{{ businessTypeName }}</span>
         </p>
       </div>
     </div>
 
-    <!-- 申請人資訊摘要 -->
+    <!-- 填寫摘要（kb-info-grid 風格鍵值） -->
     <div class="info-summary">
       <div class="summary-title">已填入資訊摘要</div>
       <div class="summary-grid">
@@ -32,73 +32,52 @@
       </div>
     </div>
 
-    <!-- 生成的表單清單 -->
+    <!-- 到期提示 -->
+    <div v-if="expiresAt" class="expires-notice">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="expires-icon">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+      下載連結將於 {{ formatExpiry(expiresAt) }} 後失效，請盡速下載
+    </div>
+
+    <!-- 生成的表單下載列 -->
     <div class="files-list">
       <div class="files-header">
         <span class="files-title">生成的表單檔案</span>
-        <button class="btn-zip" @click="handleDownloadAll">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-            />
-          </svg>
+        <BaseButton variant="primary" size="md" @click="handleDownloadAll">
           全部下載 ZIP
-        </button>
+        </BaseButton>
       </div>
 
       <div class="file-items">
-        <div v-for="tmpl in templates" :key="tmpl.id" class="file-item">
+        <div v-for="file in generatedFiles" :key="file.templateId" class="file-row">
+          <!-- 左：PDF 章 + 檔名 -->
           <div class="file-left">
-            <div class="pdf-icon-wrap">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="pdf-icon">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-                />
-              </svg>
-            </div>
-            <span class="file-pdf">{{ tmpl.pdfFileName }}</span>
+            <FileTypeBadge label="PDF" />
+            <span class="file-filename">{{ file.filename }}</span>
           </div>
-          <button class="btn-download" @click="handleDownload(tmpl)">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-              />
-            </svg>
-            下載
-          </button>
+          <!-- 右：預覽（文字）+ 下載（外框 pill） -->
+          <div class="file-actions">
+            <BaseButton variant="ghost" size="md" @click="handlePreview(file)"> 預覽 </BaseButton>
+            <BaseButton variant="outline" size="md" @click="handleDownload(file)">
+              下載
+            </BaseButton>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- 操作按鈕 -->
-    <div class="action-row">
-      <button class="btn-restart" @click="emit('restart')">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="btn-icon">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-        重新生成
-      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { useEFormDownload } from '@/composables/useEFormDownload';
-import type { EFormTemplate } from '@/types/form';
+import BaseButton from '@/components/base/BaseButton.vue';
+import FileTypeBadge from '@/components/common/FileTypeBadge.vue';
+import type { GeneratedFile } from '@/types/form';
 
 const LABEL_MAP: Record<string, string> = {
   applicant_name: '申請人姓名',
@@ -111,38 +90,51 @@ const LABEL_MAP: Record<string, string> = {
   institution_tax_id: '統一編號',
 };
 
-const props = defineProps<{
-  templates: EFormTemplate[];
+interface Props {
+  /** 本次生成的檔案清單（含後端暫存 downloadUrl） */
+  generatedFiles: GeneratedFile[];
   businessTypeName: string;
+  /** 批次打包 ZIP 的後端 URL */
+  zipUrl: string;
   filledData: Record<string, string>;
-}>();
+  /** 下載連結到期時間（ISO 字串） */
+  expiresAt?: string;
+}
 
-const emit = defineEmits<{
-  (e: 'restart'): void;
-}>();
-
-// 導入下載組合式函式
-const { downloadSingle, downloadAll } = useEFormDownload();
+const props = withDefaults(defineProps<Props>(), {
+  expiresAt: '',
+});
 
 function labelOf(key: string): string {
   return LABEL_MAP[key] ?? key;
 }
 
-/**
- * 處理單一檔案下載 (對接 Composable)
- */
-function handleDownload(tmpl: EFormTemplate) {
-  // 將下載邏輯委託給 useEFormDownload
-  downloadSingle(tmpl.id, props.filledData);
+function formatExpiry(iso: string): string {
+  try {
+    const diff = new Date(iso).getTime() - Date.now();
+    const hours = Math.floor(diff / 3600000);
+    if (hours > 0) return `${hours} 小時`;
+    const minutes = Math.floor(diff / 60000);
+    return minutes > 0 ? `${minutes} 分鐘` : '即將';
+  } catch {
+    return '';
+  }
 }
 
 /**
- * 處理全部下載 ZIP (對接 Composable)
+ * 預覽 / 下載 / ZIP 皆直接開啟生成階段已取得的後端暫存 URL，
+ * 不再重打生成 API（避免重複生成並污染歷程）。
  */
-function handleDownloadAll() {
-  // 獲取目前畫面上顯示的所有模板 ID
-  const ids = props.templates.map((t) => t.id);
-  downloadAll(ids, props.filledData);
+function handlePreview(file: GeneratedFile): void {
+  window.open(file.downloadUrl, '_blank');
+}
+
+function handleDownload(file: GeneratedFile): void {
+  window.open(file.downloadUrl, '_blank');
+}
+
+function handleDownloadAll(): void {
+  window.open(props.zipUrl, '_blank');
 }
 </script>
 
@@ -153,15 +145,15 @@ function handleDownloadAll() {
   gap: 1.5rem;
 }
 
-/* 成功 Banner */
+/* 成功橫幅 */
 .success-banner {
   display: flex;
   gap: 1rem;
   align-items: center;
   padding: 1.25rem 1.5rem;
-  background: color-mix(in srgb, #22c55e 8%, var(--bg-1));
-  border: 1px solid color-mix(in srgb, #22c55e 30%, transparent);
-  border-radius: 0.75rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-lg);
 }
 
 .success-icon-wrap {
@@ -171,15 +163,15 @@ function handleDownloadAll() {
   justify-content: center;
   width: 2.75rem;
   height: 2.75rem;
-  background: #22c55e;
+  background: var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 0 6px color-mix(in srgb, #22c55e 20%, transparent);
+  box-shadow: 0 0 0 6px var(--accent-soft);
 }
 
 .success-icon {
   width: 1.375rem;
   height: 1.375rem;
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .success-title {
@@ -203,16 +195,36 @@ function handleDownloadAll() {
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-radius: 1rem;
+  background: var(--accent-soft);
+  border-radius: var(--r-pill);
 }
 
-/* 摘要 */
+/* 到期提示 */
+.expires-notice {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border: 1px solid var(--warning);
+  border-radius: var(--r-md);
+}
+
+.expires-icon {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  color: var(--warning);
+}
+
+/* 摘要（kb-info-grid 風格） */
 .info-summary {
   padding: 1rem 1.25rem;
   background: var(--bg-hover);
   border: 1px solid var(--border);
-  border-radius: 0.625rem;
+  border-radius: var(--r-md);
 }
 
 .summary-title {
@@ -224,14 +236,14 @@ function handleDownloadAll() {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 0.5rem 1rem;
 }
 
 .summary-item {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.15rem;
 }
 
 .summary-key {
@@ -264,138 +276,51 @@ function handleDownloadAll() {
   color: var(--text);
 }
 
-.btn-zip {
-  display: flex;
-  gap: 0.375rem;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--accent);
-  cursor: pointer;
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-radius: 0.5rem;
-}
-
-.btn-zip:hover {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  transition: background-color 0.2s ease;
-}
-
 .file-items {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  gap: 0.5rem;
 }
 
-.file-item {
+/* 深色 pill 列（比照 mockup .ef-filerow） */
+.file-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.875rem 1.25rem;
-  background: var(--bg-hover);
+  padding: 0.75rem 1.25rem;
+  background: var(--bg-2);
   border: 1px solid var(--border);
-  border-radius: 0.625rem;
+  border-radius: var(--r-md);
 }
 
-.file-item:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+.file-row:hover {
+  border-color: var(--border-strong);
   transition: border-color 0.2s ease;
 }
 
 .file-left {
   display: flex;
+  flex: 1;
   gap: 0.875rem;
   align-items: center;
+  min-width: 0;
 }
 
-.pdf-icon-wrap {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  background: color-mix(in srgb, #ef4444 12%, transparent);
-  border-radius: 0.5rem;
-}
-
-.pdf-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  color: #ef4444;
-}
-
-.file-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.file-name {
+.file-filename {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 0.9375rem;
   font-weight: 500;
   color: var(--text);
+  white-space: nowrap;
 }
 
-.file-pdf {
-  font-size: 0.8rem;
-  color: var(--text-2);
-}
-
-.btn-download {
+.file-actions {
   display: flex;
   flex-shrink: 0;
-  gap: 0.375rem;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: white;
-  cursor: pointer;
-  background: var(--accent);
-  border: none;
-  border-radius: 0.5rem;
-}
-
-.btn-download:hover {
-  background: var(--accent-hover);
-  transition: background-color 0.2s ease;
-}
-
-.btn-icon {
-  width: 1rem;
-  height: 1rem;
-}
-
-/* 操作列 */
-.action-row {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.btn-restart {
-  display: flex;
   gap: 0.5rem;
   align-items: center;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text);
-  cursor: pointer;
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-}
-
-.btn-restart:hover {
-  color: var(--accent);
-  background: var(--bg);
-  border-color: var(--accent);
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease;
 }
 </style>

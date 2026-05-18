@@ -58,29 +58,36 @@ const handleClick = (event: MouseEvent) => {
   white-space: nowrap;
   cursor: pointer;
   outline: none;
-  border: none;
-  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  transition:
+    background-color var(--t),
+    color var(--t),
+    border-color var(--t);
 }
 
-/* 尺寸變體 */
+/* 尺寸變體（高度對齊 IconBtn：sm32 / md40 / lg48，確保並列按鈕等高） */
 .size-sm {
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  min-height: 32px;
+  padding: 0 1rem;
+  font-size: 0.8125rem;
 }
 
 .size-md {
-  padding: 0.75rem 1.5rem;
-  font-size: 0.9375rem;
+  min-height: 40px;
+  padding: 0 1.25rem;
+  font-size: 0.875rem;
 }
 
 .size-lg {
-  padding: 1rem 2rem;
-  font-size: 1rem;
+  min-height: 48px;
+  padding: 0 1.5rem;
+  font-size: 0.9375rem;
 }
 
 /* 樣式變體 */
 .variant-primary {
-  color: white;
+  color: var(--text-on-accent);
   background: var(--accent);
 }
 
@@ -95,23 +102,24 @@ const handleClick = (event: MouseEvent) => {
 
 .variant-secondary {
   color: var(--text);
-  background: var(--bg-1);
+  background: transparent;
+  border-color: var(--border-strong);
 }
 
 .variant-secondary:hover:not(.disabled) {
   background: var(--bg-hover);
-  transition: background-color 0.15s ease;
+  border-color: var(--border-strong);
 }
 
 .variant-outline {
   color: var(--text);
   background: transparent;
-  border: 1px solid var(--border, #d1d5db);
+  border-color: var(--border-strong);
 }
 
 .variant-outline:hover:not(.disabled) {
-  background: var(--bg-1);
-  transition: background-color 0.15s ease;
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .variant-ghost {
@@ -125,7 +133,7 @@ const handleClick = (event: MouseEvent) => {
 }
 
 .variant-danger {
-  color: white;
+  color: var(--text-on-accent);
   background: var(--error);
 }
 

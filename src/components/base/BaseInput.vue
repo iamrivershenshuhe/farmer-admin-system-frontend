@@ -23,7 +23,7 @@ import { computed } from 'vue';
 
 interface Props {
   modelValue: string;
-  type?: 'text' | 'password' | 'email' | 'number';
+  type?: 'text' | 'password' | 'email' | 'number' | 'tel' | 'date';
   placeholder?: string;
   disabled?: boolean;
   error?: string;
@@ -83,12 +83,12 @@ const handleFocus = () => {
 
 .input-field {
   width: 100%;
-  padding: 0.875rem 1.125rem;
-  font-size: 0.9375rem;
+  padding: 0.6875rem 1rem;
+  font-size: 0.875rem;
   color: var(--text);
   outline: none;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
+  background: var(--bg-1);
+  border: 2px solid var(--border);
   border-radius: var(--r-md);
 
   /* transition 不能加在基礎樣式，否則主題切換會黑閃 */
@@ -97,6 +97,11 @@ const handleFocus = () => {
 
 .input-field::placeholder {
   color: var(--text-3);
+}
+
+.input-field:hover {
+  border-color: var(--border-strong);
+  transition: border-color 0.15s ease;
 }
 
 .input-field:focus {

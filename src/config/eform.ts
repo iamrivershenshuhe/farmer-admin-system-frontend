@@ -1,4 +1,4 @@
-import type { ApplicantFieldDef } from '@/types';
+import type { ApplicantFieldDef } from '@/types/form';
 
 // 語意鍵 → 輸入欄位定義的映射表
 export const FIELD_DEF_MAP: Record<string, Omit<ApplicantFieldDef, 'required'>> = {

@@ -2,7 +2,8 @@
   <select
     :value="modelValue"
     class="filter-select"
-    :class="`filter-select--${size}`"
+    :class="[`filter-select--${size}`, { 'filter-select--disabled': disabled }]"
+    :disabled="disabled"
     @change="$emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
   >
     <option value="">{{ placeholder }}</option>
@@ -21,9 +22,11 @@ const props = withDefaults(
     options: Array<string | { value: string; label: string }>;
     placeholder: string;
     size?: 'sm' | 'md' | 'lg';
+    disabled?: boolean;
   }>(),
   {
     size: 'md',
+    disabled: false,
   }
 );
 
@@ -83,15 +86,22 @@ const normalizedOptions = computed(() =>
   font-size: 0.9375rem;
 }
 
-.filter-select:hover {
+.filter-select--disabled {
+  color: var(--text-2);
+  cursor: not-allowed;
+  background-color: var(--bg-2);
+  opacity: 1;
+}
+
+.filter-select:not(.filter-select--disabled):hover {
   border-color: var(--border-strong);
 }
 
-.filter-select:focus {
+/* focus 必須勝過 hover：同等 specificity 且置於 hover 之後，
+   否則聚焦時若游標仍懸停會被 hover 的 border-strong 蓋掉（移開才變綠） */
+.filter-select:not(.filter-select--disabled):focus {
   outline: none;
   border-color: var(--accent);
-
-  /* border 保持 2px，僅換色；chevron 以 right 定位不受影響 */
 }
 
 /* Mobile: 自動套用 sm 尺寸（不需 view 傳 prop） */

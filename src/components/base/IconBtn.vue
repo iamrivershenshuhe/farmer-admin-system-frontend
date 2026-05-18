@@ -2,7 +2,7 @@
   <button
     :type="type"
     class="icon-btn"
-    :class="[`icon-btn--${variant}`, `icon-btn--${size}`]"
+    :class="[`icon-btn--${variant}`, `icon-btn--${size}`, { 'icon-btn--icon-only': !label }]"
     :disabled="disabled"
     @click="handleClick"
   >
@@ -52,7 +52,7 @@ const handleClick = (event: MouseEvent) => {
   justify-content: center;
   cursor: pointer;
   border: 1px solid transparent;
-  border-radius: var(--r-md);
+  border-radius: var(--r-pill);
   transition:
     background-color 0.15s ease,
     color 0.15s ease,
@@ -81,12 +81,13 @@ const handleClick = (event: MouseEvent) => {
 
 .icon-btn--secondary {
   color: var(--text);
-  background-color: var(--bg-1);
-  border-color: var(--border);
+  background-color: transparent;
+  border-color: var(--border-strong);
 }
 
 .icon-btn--secondary:hover:not(:disabled) {
   background-color: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .icon-btn--ghost {
@@ -125,6 +126,24 @@ const handleClick = (event: MouseEvent) => {
   min-height: 48px;
   padding: 0.75rem 1.25rem;
   font-size: 0.9375rem;
+}
+
+/* 純圖示鈕：正方形 + 圓角方形（非膠囊橢圓），hover 底色才不會變橢圓 */
+.icon-btn--icon-only {
+  padding: 0;
+  border-radius: var(--r-md);
+}
+
+.icon-btn--icon-only.icon-btn--sm {
+  width: 32px;
+}
+
+.icon-btn--icon-only.icon-btn--md {
+  width: 40px;
+}
+
+.icon-btn--icon-only.icon-btn--lg {
+  width: 48px;
 }
 
 .btn-icon {

@@ -52,6 +52,11 @@ CLAUDE.md
 .claude/
 .superpowers/
 
+# .codex
+.codex/
+AGENTS.md
+.agents/
+
 # openspec
 openspec/
 

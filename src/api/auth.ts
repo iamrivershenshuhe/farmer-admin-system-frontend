@@ -1,84 +1,47 @@
 /**
  * 認證相關 API
  *
- * @remarks
- * 目前認證流程（Mock 與未來真實 API）統一由 `stores/auth.ts` 管理。
- * - Mock 模式：由 `stores/auth.ts` 呼叫 `mock/auth.ts` 提供資料
- * - 真實模式：後端 API ready 後，在 `stores/auth.ts` 的 TODO 處接入以下函式
+ * 此層為薄轉發：僅組裝請求、回傳業務型別（ApiResponse<T>），
+ * 業務碼 / HTTP 錯誤分流由 `utils/request.ts` 攔截器處理。
  *
- * 此檔案為 API 層的型別簽名佔位（stub），保留函式定義供 TypeScript 型別系統使用。
+ * @remarks
+ * - `logout`：後端尚未提供撤銷端點，前端登出僅清除本地狀態（見 `stores/auth.ts`），故此層不提供。
+ * - `refreshToken`：後端尚未提供刷新端點，token 過期一律走 401 登出流程；待後端 ready 再補：
+ *   ```ts
+ *   export const refreshToken = (): Promise<ApiResponse<{ accessToken: string }>> =>
+ *     httpClient.post<{ accessToken: string }>('/auth/refresh');
+ *   ```
  */
 
+import type { ApiResponse } from '@/types/api';
 import type {
   ChangePasswordRequest,
   ChangePasswordResponse,
   LoginRequest,
   LoginResponse,
 } from '@/types/auth';
+import type { UserInfo } from '@/types/user';
+import { httpClient } from '@/utils/request';
 
 /**
  * 登入
- *
- * @remarks
- * 目前由 `stores/auth.ts` 內部 Mock 實作；後端 ready 後取消此函式的 stub 狀態
- *
- * TODO: 後端 API ready 後啟用
- * ```ts
- * export const login = (data: LoginRequest) =>
- *   httpClient.post<LoginResponse>('/auth/login', data);
- * ```
  */
-export const login = (_data: LoginRequest): Promise<LoginResponse> => {
-  if (import.meta.env.DEV) {
-    console.warn('[api/auth] login() 尚未接入後端，請透過 stores/auth.ts 呼叫 Mock 流程');
-  }
-  return Promise.reject(new Error('auth/login: pending backend implementation'));
-};
+export const login = (data: LoginRequest): Promise<ApiResponse<LoginResponse>> =>
+  httpClient.post<LoginResponse>('/auth/login', data);
 
 /**
- * 登出
+ * 取得當前登入者即時身分
  *
- * TODO: 後端 API ready 後啟用
- * ```ts
- * export const logout = () =>
- *   httpClient.post<void>('/auth/logout');
- * ```
+ * 後端依 token 回傳最新使用者資料（含 role / department / businessTypeIds）。
+ * 前端據此同步單一真相源，使 admin 端的指派變更免重新登入即可生效。
  */
-export const logout = (): Promise<void> => {
-  if (import.meta.env.DEV) {
-    console.warn('[api/auth] logout() 尚未接入後端');
-  }
-  return Promise.reject(new Error('auth/logout: pending backend implementation'));
-};
-
-/**
- * 刷新 Access Token
- *
- * TODO: 後端 API ready 後啟用
- * ```ts
- * export const refreshToken = () =>
- *   httpClient.post<{ accessToken: string }>('/auth/refresh');
- * ```
- */
-export const refreshToken = (): Promise<{ accessToken: string }> => {
-  if (import.meta.env.DEV) {
-    console.warn('[api/auth] refreshToken() 尚未接入後端');
-  }
-  return Promise.reject(new Error('auth/refreshToken: pending backend implementation'));
-};
+export const getCurrentUser = (): Promise<ApiResponse<UserInfo>> =>
+  httpClient.get<UserInfo>('/auth/me');
 
 /**
  * 修改密碼
- *
- * TODO: 後端 API ready 後啟用
- * ```ts
- * export const changePassword = (data: ChangePasswordRequest) =>
- *   httpClient.post<ChangePasswordResponse>('/auth/change-password', data);
- * ```
  */
-export const changePassword = (_data: ChangePasswordRequest): Promise<ChangePasswordResponse> => {
-  if (import.meta.env.DEV) {
-    console.warn('[api/auth] changePassword() 尚未接入後端，請透過 stores/auth.ts 呼叫 Mock 流程');
-  }
-  return Promise.reject(new Error('auth/changePassword: pending backend implementation'));
-};
+export const changePassword = (
+  data: ChangePasswordRequest
+): Promise<ApiResponse<ChangePasswordResponse>> =>
+  httpClient.post<ChangePasswordResponse>('/auth/change-password', data);

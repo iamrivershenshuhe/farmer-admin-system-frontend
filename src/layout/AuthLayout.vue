@@ -35,4 +35,13 @@
   max-width: 32rem;
   padding: 2rem;
 }
+
+/*
+ * auth 頁專用：按鈕圓角由全域膠囊（--r-pill）改為圓角方（--r-md），
+ * 與輸入框一致。單點覆寫，僅作用於 AuthLayout 內的三個 auth 視圖，
+ * 不影響全域 BaseButton。
+ */
+.auth-container :deep(.base-button) {
+  border-radius: var(--r-md);
+}
 </style>

@@ -18,6 +18,12 @@ import type { ApiResponse } from '@/types';
 class HttpClient {
   private instance: AxiosInstance;
 
+  /**
+   * 401 處理競態鎖：並發請求同時收到 401 時，
+   * 僅第一個觸發「清除狀態 + 導向登入」，其餘略過避免重複跳轉。
+   */
+  private isSessionExpiring = false;
+
   constructor() {
     this.instance = axios.create({
       // 含版本前綴：http://localhost:3000/api/v1
@@ -101,12 +107,25 @@ class HttpClient {
   private handleHttpError(status: number): void {
     switch (status) {
       case 401:
-        // Token 無效或過期：清除本地憑證，跳轉登入頁
-        localStorage.removeItem('auth_token');
-        // 使用 lazy import 避免與 router 產生循環依賴
-        import('@/router').then(({ default: router }) => {
-          router.push('/login');
-        });
+        // Token 無效或過期：清除憑證並導向登入頁。
+        // 競態鎖確保並發 401 只處理一次（避免重複清除與重複跳轉）。
+        if (this.isSessionExpiring) {
+          break;
+        }
+        this.isSessionExpiring = true;
+        // 先清 Pinia 狀態（持久化外掛會連動寫回 storage），再顯式清 localStorage 作雙保險；
+        // 全程 lazy import 避免與 store / router 形成循環依賴。
+        Promise.all([import('@/stores/auth'), import('@/stores/user'), import('@/router')])
+          .then(([{ useAuthStore }, { useUserStore }, { default: router }]) => {
+            useAuthStore().clearToken();
+            useUserStore().clearUser();
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user-info');
+            return router.push('/login');
+          })
+          .finally(() => {
+            this.isSessionExpiring = false;
+          });
         break;
 
       case 403:

@@ -106,8 +106,8 @@ import { computed, ref } from 'vue';
 import BaseTable, { type BaseTableRow, type ColumnDef } from '@/components/base/BaseTable.vue';
 import DropdownMenu from '@/components/common/DropdownMenu.vue';
 import { fileTypeOf } from '@/constants/fileType';
-import type { DocType, KnowledgeDocument } from '@/types/knowledge';
-import { DOC_TYPE_LABELS } from '@/types/knowledge';
+import type { DocType, DocumentStatus, KnowledgeDocument } from '@/types/knowledge';
+import { DOC_TYPE_LABELS, DOCUMENT_STATUS_LABELS } from '@/types/knowledge';
 
 const props = defineProps<{
   documents: KnowledgeDocument[];
@@ -210,14 +210,15 @@ const formatDateShort = (iso: string): string => {
 const iconLabel = (mime: string) => fileTypeOf(mime).label;
 const iconClass = (mime: string) => fileTypeOf(mime).cls;
 
-const STATUS_LBL: Record<string, { label: string; cls: string }> = {
-  ready: { label: '已就緒', cls: 'lbl-accent' },
-  processing: { label: '處理中', cls: 'lbl-warning' },
-  uploading: { label: '處理中', cls: 'lbl-warning' },
-  error: { label: '錯誤', cls: 'lbl-error' },
+// 標籤文字用集中來源 DOCUMENT_STATUS_LABELS；樣式類別屬呈現層保留本地
+const STATUS_CLS: Record<string, string> = {
+  ready: 'lbl-accent',
+  uploading: 'lbl-default',
+  processing: 'lbl-warning',
+  error: 'lbl-error',
 };
-const statusLabel = (s: string) => STATUS_LBL[s]?.label ?? s;
-const statusLblClass = (s: string) => STATUS_LBL[s]?.cls ?? 'lbl-default';
+const statusLabel = (s: string) => DOCUMENT_STATUS_LABELS[s as DocumentStatus] ?? s;
+const statusLblClass = (s: string) => STATUS_CLS[s] ?? 'lbl-default';
 </script>
 
 <style scoped>

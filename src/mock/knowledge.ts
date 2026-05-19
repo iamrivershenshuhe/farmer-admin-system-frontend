@@ -294,6 +294,29 @@ export const mockDocuments: MockKnowledgeDocument[] = [
     chunkCount: 80,
     deletedAt: '2024-01-01 09:00:00',
   },
+
+  // ── VG011：上傳中狀態示範（公開法規，全員可見，向量化未完成）─────────────
+  {
+    id: 'DOC013',
+    filename: '農會年度業務報告草稿2026.pdf',
+    fileSize: 2097152,
+    mimeType: 'application/pdf',
+    fileUrl: '/files/knowledge/DOC013.pdf',
+    docType: 'public_regulation',
+    departmentId: null,
+    businessTypeIds: [],
+    version: '2026-draft',
+    versionNote: '',
+    versionGroupId: 'VG011',
+    supersededBy: null,
+    description: '剛上傳、尚未開始向量化，示範「上傳中」狀態',
+    uploadedBy: '系統管理員',
+    uploadedAt: '2026-05-19 09:00:00',
+    updatedAt: '2026-05-19 09:00:00',
+    status: DocumentStatus.UPLOADING,
+    chunkCount: 0,
+    deletedAt: null,
+  },
 ];
 
 /** 產生不重複的新 mock ID（格式 DOCxxx） */

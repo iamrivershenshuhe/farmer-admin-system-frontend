@@ -1,22 +1,20 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
 
 import logoImage from '@/assets/images/national_farmers_logo.png';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseInput from '@/components/base/BaseInput.vue';
+import { useLogin } from '@/composables/useLogin';
 import { ICONS } from '@/constants';
 import { useAuthStore } from '@/stores/auth';
-import { useUserStore } from '@/stores/user';
 
 /**
  * 登入頁面
  * 使用 username + password 進行登入
  */
 
-const router = useRouter();
 const authStore = useAuthStore();
-const userStore = useUserStore();
+const { login } = useLogin();
 
 // 表單資料
 const formData = ref({
@@ -36,7 +34,10 @@ const showPassword = ref(false);
 
 /**
  * 表單驗證
- * 檢查用戶名和密碼是否符合基本要求
+ *
+ * 登入只驗「非空」：不檢查密碼長度 / 強度。
+ * 密碼強度政策僅適用於修改密碼頁（usePasswordValidation 為唯一來源），
+ * 既有帳號可能不符新政策，登入端不得擋下。
  */
 const validateForm = (): boolean => {
   errors.value = { username: '', password: '', general: '' };
@@ -51,36 +52,25 @@ const validateForm = (): boolean => {
     return false;
   }
 
-  if (formData.value.password.length < 6) {
-    errors.value.password = '密碼至少需要 6 個字元';
-    return false;
-  }
-
   return true;
 };
 
 /**
  * 處理登入
- * 驗證表單後呼叫登入 API
+ * 驗證表單後委由 useLogin 封裝執行登入編排
  */
 const handleLogin = async () => {
   if (!validateForm()) {
     return;
   }
 
-  try {
-    const response = await authStore.login({
-      username: formData.value.username,
-      password: formData.value.password,
-    });
+  const result = await login({
+    username: formData.value.username,
+    password: formData.value.password,
+  });
 
-    // 儲存用戶資訊
-    userStore.setUser(response.user);
-
-    // 跳轉到首頁
-    router.push('/chat');
-  } catch (error) {
-    errors.value.general = error instanceof Error ? error.message : '登入失敗，請稍後再試';
+  if (result !== true) {
+    errors.value.general = result;
   }
 };
 

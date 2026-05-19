@@ -158,6 +158,7 @@ import { useBusinessTypeStore } from '@/stores/business-type';
 import { useDepartmentStore } from '@/stores/department';
 import { useKnowledgeStore } from '@/stores/knowledge';
 import type { DocType, KnowledgeDocument, UploadKnowledgeDocumentRequest } from '@/types/knowledge';
+import { DOC_TYPE_LABELS, DOCUMENT_STATUS_LABELS, DocumentStatus } from '@/types/knowledge';
 
 import DocumentTable from './components/DocumentTable.vue';
 import DocumentDetailModal from './components/modals/DocumentDetailModal.vue';
@@ -201,8 +202,12 @@ const businessTypeChoices = computed(() =>
   }))
 );
 
+// 篩選器選項一律由後端可見範圍 facets 驅動（非靜態全量），固定不隨其他已選篩選連動。
+// 依 DOC_TYPE_LABELS 既有順序排列，僅保留 facets 內實際存在者。
 const docTypeFilterOptions = computed(() =>
-  knowledgeStore.docTypeOptions.map((o) => ({ value: o.value, label: o.label }))
+  (Object.keys(DOC_TYPE_LABELS) as DocType[])
+    .filter((v) => knowledgeStore.facets.docTypes.includes(v))
+    .map((v) => ({ value: v, label: DOC_TYPE_LABELS[v] }))
 );
 
 const departmentFilterOptions = computed(() =>
@@ -212,21 +217,20 @@ const departmentFilterOptions = computed(() =>
     .map((d) => ({ value: d.id, label: d.name.replace(/^農會/, '') }))
 );
 
-// 部門 → 業別連動：選定部門時，業別下拉只列該部門的業務別；未選部門則列全部
-const businessTypeFilterOptions = computed(() => {
-  const deptId = filters.value.departmentId;
-  const source = deptId
-    ? (businessTypeStore.businessTypesByDept[deptId] ?? [])
-    : allBusinessTypes.value;
-  // 業務別選項只顯業務名（不加部門前綴）；連動後語意已明確
-  return source.map((b) => ({ value: b.id, label: b.name }));
-});
+// 業務別選項 = 可見範圍 facets 內出現的業務別；名稱經組織模組解析（fallback 顯 id）。
+const businessTypeFilterOptions = computed(() =>
+  knowledgeStore.facets.businessTypeIds.map((id) => ({
+    value: id,
+    label: btNameMap.value[id] ?? id,
+  }))
+);
 
-const statusOptions = [
-  { value: 'ready', label: '已就緒' },
-  { value: 'processing', label: '處理中' },
-  { value: 'error', label: '錯誤' },
-];
+// 狀態選項依 facets，固定順序（已就緒 → 上傳中 → 處理中 → 錯誤）；標籤用集中來源
+const statusOptions = computed(() =>
+  [DocumentStatus.READY, DocumentStatus.UPLOADING, DocumentStatus.PROCESSING, DocumentStatus.ERROR]
+    .filter((s) => knowledgeStore.facets.statuses.includes(s))
+    .map((s) => ({ value: s, label: DOCUMENT_STATUS_LABELS[s] }))
+);
 
 const hasActiveFilter = computed(
   () =>

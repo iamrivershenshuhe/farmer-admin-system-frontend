@@ -14,6 +14,7 @@ import {
 } from '@/api/knowledge';
 import type {
   DocTypeOption,
+  DocumentFacets,
   GetDocumentsRequest,
   KnowledgeDocument,
   UpdateDocumentRequest,
@@ -53,6 +54,8 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
   const isLoading = ref(false);
   const filters = ref<Filters>({ ...DEFAULT_FILTERS });
   const docTypeOptions = ref<DocTypeOption[]>([]);
+  /** 後端依當次身分回傳的可見範圍 facets（篩選器選項唯一來源）*/
+  const facets = ref<DocumentFacets>({ docTypes: [], statuses: [], businessTypeIds: [] });
 
   /** 目前開啟的文件詳情 */
   const currentDocument = ref<KnowledgeDocument | null>(null);
@@ -64,10 +67,10 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
     total.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
   );
   const endIndex = computed(() => Math.min(currentPage.value * pageSize.value, total.value));
-  // 「處理中」涵蓋上傳中：兩者皆為向量化未完成的過渡態，需持續輪詢
+  // 非終態（uploading / processing）即代表向量化未完成，需持續輪詢
   const hasProcessing = computed(() =>
     documents.value.some(
-      (d) => d.status === DocumentStatus.PROCESSING || d.status === DocumentStatus.UPLOADING
+      (d) => d.status !== DocumentStatus.READY && d.status !== DocumentStatus.ERROR
     )
   );
 
@@ -86,6 +89,7 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
       currentPage.value = data.page;
       pageSize.value = data.pageSize;
       totalPages.value = data.totalPages;
+      facets.value = data.facets;
     } finally {
       isLoading.value = false;
     }
@@ -187,6 +191,7 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
     isLoading,
     filters,
     docTypeOptions,
+    facets,
     currentDocument,
     currentVersions,
     // Getters

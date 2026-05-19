@@ -4,7 +4,7 @@ import type { FormSessionRecord } from '@/types/form';
 import type { UserInfo } from '@/types/user';
 
 import { MOCK_TEMPLATES, mockSessions, nextSessionId } from '../eform';
-import { mockUsers } from '../staff';
+import { resolvePrincipal } from './_helpers';
 
 // 電子表單 MSW handler —「契約替身」
 //
@@ -24,26 +24,6 @@ const ENVELOPE = (data: unknown, code = 0, message = 'success') => ({
   data,
   timestamp: Date.now(),
 });
-
-/** 模擬後端解析 JWT：由 Authorization header 或 localStorage 取得呼叫者身分 */
-function resolvePrincipal(request: Request): UserInfo | null {
-  const auth = request.headers.get('Authorization') ?? '';
-  const matched = auth.match(/mock-access-token\.([A-Za-z0-9_]+)/);
-  if (matched) {
-    const user = mockUsers.find((u) => u.username === matched[1]);
-    if (user) return user;
-  }
-  try {
-    const raw = localStorage.getItem('user-info');
-    if (raw) {
-      const parsed = JSON.parse(raw) as { user?: UserInfo };
-      if (parsed.user) return parsed.user;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
 
 /**
  * 依角色套用可見範圍過濾（仿 knowledge handler 的 isVisible 模式）：

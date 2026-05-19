@@ -15,7 +15,7 @@ import { useUserStore } from '@/stores/user';
  * 全域前置守衛
  * 處理認證檢查、密碼修改檢查和權限檢查
  */
-export const setupAuthGuard = (
+export const setupAuthGuard = async (
   to: RouteLocationNormalized,
   _from: RouteLocationNormalized,
   next: NavigationGuardNext
@@ -47,6 +47,18 @@ export const setupAuthGuard = (
   // 如果是受保護路由
   if (!isAuthenticated) {
     // 未登入用戶，重定向到登入頁
+    next('/login');
+    return;
+  }
+
+  // 單一真相源同步：每次已登入導航向後端拉取即時身分，
+  // 使 admin 端的角色 / 部門 / 業務別指派變更免重新登入即生效。
+  // 失敗（token 失效 / 後端不可用）視為登出。
+  try {
+    await userStore.fetchCurrentUser();
+  } catch {
+    authStore.clearToken();
+    userStore.clearUser();
     next('/login');
     return;
   }

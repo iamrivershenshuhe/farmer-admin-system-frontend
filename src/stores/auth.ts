@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
+import { authApi } from '@/api';
 import type { ChangePasswordResponse, LoginRequest, LoginResponse } from '@/types/auth';
-import { httpClient } from '@/utils/request';
 
 /**
  * 認證狀態管理
@@ -40,7 +40,7 @@ export const useAuthStore = defineStore(
       isLoggingIn.value = true;
 
       try {
-        const res = await httpClient.post<LoginResponse>('/auth/login', credentials);
+        const res = await authApi.login(credentials);
         const { data } = res;
         setToken(data.accessToken);
         return data;
@@ -66,10 +66,7 @@ export const useAuthStore = defineStore(
       isLoggingIn.value = true;
 
       try {
-        const res = await httpClient.post<ChangePasswordResponse>('/auth/change-password', {
-          oldPassword,
-          newPassword,
-        });
+        const res = await authApi.changePassword({ oldPassword, newPassword });
         return res.data;
       } finally {
         isLoggingIn.value = false;

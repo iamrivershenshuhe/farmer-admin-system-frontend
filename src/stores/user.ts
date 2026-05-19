@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
+import { authApi } from '@/api';
 import type { UserInfo } from '@/types/user';
 import { ROLE_LABELS } from '@/types/user';
 
@@ -38,6 +39,19 @@ export const useUserStore = defineStore(
       user.value = null;
     };
 
+    /**
+     * 從後端拉取當前登入者即時身分並覆寫本地狀態。
+     *
+     * 作為使用者範圍的單一真相源同步點：由路由守衛在每次已登入導航時呼叫，
+     * 使 admin 端的角色 / 部門 / 業務別指派變更免重新登入即生效。
+     * 失敗時拋出，由呼叫端（守衛）決定登出導向。
+     */
+    const fetchCurrentUser = async (): Promise<UserInfo> => {
+      const res = await authApi.getCurrentUser();
+      user.value = res.data;
+      return res.data;
+    };
+
     return {
       // State
       user,
@@ -50,6 +64,7 @@ export const useUserStore = defineStore(
       // Actions
       setUser,
       clearUser,
+      fetchCurrentUser,
     };
   },
   {

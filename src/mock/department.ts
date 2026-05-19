@@ -70,7 +70,7 @@ export const mockBusinessTypes: BusinessType[] = [
     description: '辦理存款帳戶管理業務',
     active: true,
   },
-  { id: 'BT003', departmentId: 'DEPT001', name: '催收業務', active: false },
+  { id: 'BT003', departmentId: 'DEPT001', name: '催收業務', active: true },
   // 供銷部 (DEPT002)
   {
     id: 'BT004',

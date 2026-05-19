@@ -97,7 +97,7 @@ const handleChangePassword = async () => {
   try {
     await authStore.changePassword(formData.value.oldPassword, formData.value.newPassword);
 
-    // 修改成功，跳轉到首頁
+    // 後端已清除強制改密旗標，守衛下次導航 fetchCurrentUser 會同步；直接導向首頁
     router.push('/chat');
   } catch (error) {
     errors.value.general = error instanceof Error ? error.message : '密碼修改失敗，請稍後再試';

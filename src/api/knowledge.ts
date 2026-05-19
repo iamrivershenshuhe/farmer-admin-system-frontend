@@ -6,12 +6,13 @@
  * 過濾 / 排序 / 分頁 / RBAC 可見範圍皆由後端（mock 為契約替身）處理。
  */
 
-import type { ApiResponse, PaginationResponse } from '@/types/api';
+import type { ApiResponse } from '@/types/api';
 import type {
   BatchDeleteDocumentsRequest,
   DeleteDocumentRequest,
   DocTypeOption,
   DocumentDetail,
+  DocumentListResult,
   GetDocumentsRequest,
   KnowledgeDocument,
   UpdateDocumentRequest,
@@ -26,8 +27,8 @@ import { httpClient } from '@/utils/request';
  */
 export const getDocuments = async (
   params: GetDocumentsRequest
-): Promise<ApiResponse<PaginationResponse<KnowledgeDocument>>> => {
-  return httpClient.get<PaginationResponse<KnowledgeDocument>>('/knowledge/documents', {
+): Promise<ApiResponse<DocumentListResult>> => {
+  return httpClient.get<DocumentListResult>('/knowledge/documents', {
     params,
   });
 };

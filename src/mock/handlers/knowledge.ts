@@ -6,7 +6,7 @@ import type { UserInfo } from '@/types/user';
 
 import type { MockKnowledgeDocument } from '../knowledge';
 import { mockDocuments, nextDocId, nextVgId } from '../knowledge';
-import { mockUsers } from '../staff';
+import { resolvePrincipal } from './_helpers';
 
 // 知識庫 MSW handler —「契約替身」
 //
@@ -31,26 +31,6 @@ const ENVELOPE = (data: unknown, code = 0, message = 'success') => ({
   data,
   timestamp: Date.now(),
 });
-
-/** 模擬後端解析 JWT：由 Authorization header 取得呼叫者身分 */
-function resolvePrincipal(request: Request): UserInfo | null {
-  const auth = request.headers.get('Authorization') ?? '';
-  const matched = auth.match(/mock-access-token\.([A-Za-z0-9_]+)/);
-  if (matched) {
-    const user = mockUsers.find((u) => u.username === matched[1]);
-    if (user) return user;
-  }
-  try {
-    const raw = localStorage.getItem('user-info');
-    if (raw) {
-      const parsed = JSON.parse(raw) as { user?: UserInfo };
-      if (parsed.user) return parsed.user;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
 
 /** 依規格 1.3 可見範圍規則過濾（manager 的 businessTypeIds 已含本部門全部） */
 function isVisible(doc: KnowledgeDocument, user: UserInfo): boolean {
@@ -97,14 +77,10 @@ function applyQuery(docs: KnowledgeDocument[], url: URL): KnowledgeDocument[] {
   const businessTypeId = q.get('businessTypeId');
   if (businessTypeId) result = result.filter((d) => d.businessTypeIds.includes(businessTypeId));
 
-  // 「處理中」涵蓋上傳中（uploading 視為 processing 的一種過渡態）
+  // 四態各自獨立，直接比對（uploading / processing 不再合併）
   const status = q.get('status');
   if (status) {
-    result = result.filter((d) =>
-      status === 'processing'
-        ? d.status === 'processing' || d.status === 'uploading'
-        : d.status === status
-    );
+    result = result.filter((d) => d.status === status);
   }
 
   const sortBy = (q.get('sortBy') as 'updatedAt' | 'uploadedAt' | 'filename') || 'updatedAt';
@@ -198,10 +174,18 @@ export const knowledgeHandlers = [
       versionCount: groupCountMap.get(doc.versionGroupId) ?? 1,
     }));
 
-    // 4. applyQuery（keyword / docType / dept / bt / status + 排序）
+    // 4. facets：以「可見文件全集」(latestDocs) 計算，固定不隨其他已選篩選連動。
+    //    四態各自獨立，不折疊（與 applyQuery / 前端狀態語意一致）。
+    const facets = {
+      docTypes: [...new Set(latestDocs.map((d) => d.docType))],
+      statuses: [...new Set(latestDocs.map((d) => d.status))],
+      businessTypeIds: [...new Set(latestDocs.flatMap((d) => d.businessTypeIds))],
+    };
+
+    // 5. applyQuery（keyword / docType / dept / bt / status + 排序）
     const filtered = applyQuery(latestDocs, url);
 
-    // 5. 分頁
+    // 6. 分頁
     const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
     const pageSize = Math.max(1, Number(url.searchParams.get('pageSize')) || 20);
     const total = filtered.length;
@@ -210,7 +194,9 @@ export const knowledgeHandlers = [
     const start = (safePage - 1) * pageSize;
     const items = filtered.slice(start, start + pageSize);
 
-    return HttpResponse.json(ENVELOPE({ items, total, page: safePage, pageSize, totalPages }));
+    return HttpResponse.json(
+      ENVELOPE({ items, total, page: safePage, pageSize, totalPages, facets })
+    );
   }),
 
   // ── batch-delete 須在 :id 前註冊 ────────────────────────────────────────────

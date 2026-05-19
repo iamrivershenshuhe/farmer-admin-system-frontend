@@ -8,6 +8,8 @@
  * 與電子表單模組的 OCR 座標標記表單模板（供動態生成填寫用）生命週期不同，兩者不互混。
  */
 
+import type { PaginationResponse } from './api';
+
 // 文件類別（5 種，決定存取可見範圍）
 export type DocType =
   | 'public_regulation' // 公開法規 — 全員可見
@@ -31,6 +33,14 @@ export enum DocumentStatus {
   READY = 'ready',
   ERROR = 'error',
 }
+
+/** 文件狀態顯示文字（四態各自獨立，無折疊）*/
+export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
+  [DocumentStatus.UPLOADING]: '上傳中',
+  [DocumentStatus.PROCESSING]: '處理中',
+  [DocumentStatus.READY]: '已就緒',
+  [DocumentStatus.ERROR]: '錯誤',
+};
 
 // 知識庫文件
 export interface KnowledgeDocument {
@@ -75,6 +85,24 @@ export interface GetDocumentsRequest {
   status?: DocumentStatus;
   sortBy?: 'updatedAt' | 'uploadedAt' | 'filename';
   sortOrder?: 'asc' | 'desc';
+}
+
+/**
+ * 篩選 facets：使用者 RBAC 可見範圍內「實際存在」的可選值。
+ *
+ * 由後端（mock 為契約替身）依當次請求身分計算，前端篩選器只渲染這些值，
+ * 不再用靜態全量 / 全部門業務別，避免提供範圍外或無資料的選項。
+ * 採固定基準：以可見文件全集計算，不隨其他已選篩選連動。
+ */
+export interface DocumentFacets {
+  docTypes: DocType[];
+  statuses: DocumentStatus[];
+  businessTypeIds: string[];
+}
+
+// 文件列表回應：分頁結果 + 可見範圍 facets
+export interface DocumentListResult extends PaginationResponse<KnowledgeDocument> {
+  facets: DocumentFacets;
 }
 
 // 多檔上傳時每個檔案各自的中繼資料

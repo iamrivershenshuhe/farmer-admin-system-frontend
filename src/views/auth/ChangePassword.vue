@@ -97,6 +97,9 @@ const handleChangePassword = async () => {
   try {
     await authStore.changePassword(formData.value.oldPassword, formData.value.newPassword);
 
+    // 清除強制改密旗標，否則路由守衛會把 /chat 再導回 /change-password
+    userStore.clearMustChangePassword();
+
     // 修改成功，跳轉到首頁
     router.push('/chat');
   } catch (error) {

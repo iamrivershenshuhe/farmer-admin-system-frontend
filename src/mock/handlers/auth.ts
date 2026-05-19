@@ -113,8 +113,21 @@ export const authHandlers = [
     });
   }),
 
-  // 修改密碼
-  http.post('*/api/v1/auth/change-password', () => {
+  // 修改密碼：模擬後端清除該帳號的強制改密旗標（單一真相源）
+  http.post('*/api/v1/auth/change-password', ({ request }) => {
+    const principal = resolvePrincipal(request);
+    if (!principal) {
+      return HttpResponse.json({
+        code: 10001,
+        message: '未登入或 Token 無效',
+        data: null,
+        timestamp: Date.now(),
+      });
+    }
+
+    const account = mockUsers.find((u) => u.id === principal.id);
+    if (account) account.mustChangePassword = false;
+
     return HttpResponse.json({
       code: 0,
       message: '密碼修改成功',

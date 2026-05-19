@@ -40,16 +40,6 @@ export const useUserStore = defineStore(
     };
 
     /**
-     * 清除「強制修改密碼」旗標
-     * 改密成功後呼叫，讓路由守衛不再攔截導向 /change-password
-     */
-    const clearMustChangePassword = (): void => {
-      if (user.value) {
-        user.value = { ...user.value, mustChangePassword: false };
-      }
-    };
-
-    /**
      * 從後端拉取當前登入者即時身分並覆寫本地狀態。
      *
      * 作為使用者範圍的單一真相源同步點：由路由守衛在每次已登入導航時呼叫，
@@ -74,7 +64,6 @@ export const useUserStore = defineStore(
       // Actions
       setUser,
       clearUser,
-      clearMustChangePassword,
       fetchCurrentUser,
     };
   },

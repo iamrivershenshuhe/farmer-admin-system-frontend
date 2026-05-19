@@ -15,8 +15,16 @@
         <div class="user-details">
           <div class="user-id">{{ userInfo.name }}</div>
           <div class="user-meta">
-            <span class="role-tag">{{ ROLE_LABELS[userInfo.role] }}</span>
-            <span class="dept-text">{{ userInfo.department }}</span>
+            <span class="role-tag" :class="roleClass">{{ ROLE_LABELS[userInfo.role] }}</span>
+            <span v-if="userInfo.department" class="dept-text">{{ userInfo.department }}</span>
+          </div>
+          <div v-if="showBusinessTypes && assignedBusinessTypeNames.length > 0" class="bt-section">
+            <span class="bt-label">業務別</span>
+            <div class="bt-tags">
+              <span v-for="name in assignedBusinessTypeNames" :key="name" class="bt-tag">
+                {{ name }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -195,6 +203,7 @@ import { useRouter } from 'vue-router';
 import { useTheme } from '@/composables/useTheme';
 import { ICONS } from '@/constants/icons';
 import { useAuthStore } from '@/stores/auth';
+import { useBusinessTypeStore } from '@/stores/business-type';
 import { useUserStore } from '@/stores/user';
 import type { ThemeMode } from '@/types/theme';
 import { ROLE_LABELS } from '@/types/user';
@@ -213,6 +222,7 @@ const router = useRouter();
 const { theme, setTheme } = useTheme();
 const authStore = useAuthStore();
 const userStore = useUserStore();
+const businessTypeStore = useBusinessTypeStore();
 const menuRef = ref<HTMLDivElement | null>(null);
 const showAppearanceSubmenu = ref(false);
 const currentPanel = ref<'main' | 'appearance'>('main');
@@ -258,6 +268,25 @@ const userInitial = computed(() => {
   return name.charAt(0).toUpperCase() || '?';
 });
 
+// 角色色：admin=綠(accent) / manager=黃(warning) / user=藍(info)
+const roleClass = computed(() => `role-${userInfo.value?.role ?? 'user'}`);
+
+// 業務別僅對 manager / user 有意義（admin 不限部門、無指派業務別）
+const showBusinessTypes = computed(
+  () => userInfo.value?.role === 'manager' || userInfo.value?.role === 'user'
+);
+
+// 將使用者被指派的 businessTypeIds 解析為名稱（依其部門快取查名）
+const assignedBusinessTypeNames = computed<string[]>(() => {
+  const deptId = userStore.userDepartmentId;
+  const ids = userStore.userBusinessTypeIds;
+  if (!deptId || ids.length === 0) return [];
+  const list = businessTypeStore.businessTypesByDept[deptId] ?? [];
+  return ids
+    .map((id) => list.find((bt) => bt.id === id)?.name)
+    .filter((name): name is string => Boolean(name));
+});
+
 const themeOptions = [
   { value: 'light' as const, label: '淺色', icon: 'SUN' as const },
   { value: 'dark' as const, label: '深色', icon: 'MOON' as const },
@@ -293,6 +322,12 @@ onMounted(() => {
   setTimeout(() => {
     window.addEventListener('click', handleClickOutside);
   }, 0);
+
+  // 載入使用者所屬部門的業務別，供名稱解析（store 已內建快取，重複呼叫不重打）
+  const deptId = userStore.userDepartmentId;
+  if (showBusinessTypes.value && deptId && userStore.userBusinessTypeIds.length > 0) {
+    businessTypeStore.fetchBusinessTypes(deptId);
+  }
 });
 
 onUnmounted(() => {
@@ -406,8 +441,8 @@ onUnmounted(() => {
 /* 使用者資訊 */
 .user-info-section {
   display: flex;
-  gap: 1rem;
-  align-items: center;
+  gap: 0.875rem;
+  align-items: flex-start;
   padding: 1.25rem;
 }
 
@@ -429,35 +464,79 @@ onUnmounted(() => {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.5rem;
   min-width: 0;
 }
 
 .user-id {
-  font-family: 'Segoe UI', sans-serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 1rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
+  white-space: nowrap;
 }
 
 .user-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
 
 .role-tag {
-  padding: 0.125rem 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--r-pill);
+}
+
+.role-tag.role-admin {
   color: var(--accent);
   background: var(--accent-soft);
-  border-radius: var(--r-md);
+}
+
+.role-tag.role-manager {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.role-tag.role-user {
+  color: var(--info);
+  background: rgb(37 99 235 / 14%);
 }
 
 .dept-text {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--text-2);
+}
+
+/* 被指派業務別 */
+.bt-section {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.bt-label {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.bt-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.bt-tag {
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
 }
 
 /* 區隔線 */

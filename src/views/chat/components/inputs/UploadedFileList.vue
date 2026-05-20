@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ICONS } from '@/constants';
-import type { UploadedFile } from '@/types';
+import type { UploadedFile } from '@/types/upload';
 
 interface Props {
   files: UploadedFile[];

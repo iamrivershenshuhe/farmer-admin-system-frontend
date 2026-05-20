@@ -3,7 +3,7 @@ import { ref } from 'vue';
 
 import { getConversations, sendMessage as sendMessageApi } from '@/api/chat';
 import { CHAT } from '@/config';
-import type { Conversation, Message } from '@/types';
+import type { Conversation, Message } from '@/types/chat';
 
 export const useChatStore = defineStore(
   'chat',

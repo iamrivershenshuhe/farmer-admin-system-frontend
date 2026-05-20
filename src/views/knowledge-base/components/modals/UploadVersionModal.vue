@@ -113,6 +113,7 @@ import BaseModal from '@/components/base/BaseModal.vue';
 import { fileTypeOf } from '@/constants/fileType';
 import type { KnowledgeDocument, UploadNewVersionRequest } from '@/types/knowledge';
 import { DOC_TYPE_LABELS } from '@/types/knowledge';
+import { nonEmptyString } from '@/utils/validators';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -178,12 +179,13 @@ const removeFile = () => {
   fileError.value = '';
 };
 
+// 規則集中於 utils/validators（ADR-0004）
 const isFormValid = computed(
   () =>
     !!selectedFile.value &&
     !fileError.value &&
-    form.value.version.trim() !== '' &&
-    form.value.versionNote.trim() !== ''
+    nonEmptyString(form.value.version) === null &&
+    nonEmptyString(form.value.versionNote) === null
 );
 
 const handleSubmit = () => {

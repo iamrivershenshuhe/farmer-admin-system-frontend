@@ -151,6 +151,7 @@ import type {
   UploadDocumentItem,
   UploadKnowledgeDocumentRequest,
 } from '@/types/knowledge';
+import { nonEmptyString, required } from '@/utils/validators';
 
 interface SelectOption {
   value: string;
@@ -252,8 +253,11 @@ const toggleBt = (item: FileItem, id: string) => {
     : [...item.businessTypeIds, id];
 };
 
+// 規則集中於 utils/validators（ADR-0004）
 const isFormValid = computed(
-  () => fileItems.value.length > 0 && fileItems.value.every((i) => !i.error && i.docType !== '')
+  () =>
+    required(fileItems.value) === null &&
+    fileItems.value.every((i) => !i.error && nonEmptyString(i.docType) === null)
 );
 
 const handleSubmit = () => {

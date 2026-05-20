@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router';
 
+import Toast from '@/components/common/Toast.vue';
 import { useTheme } from '@/composables/useTheme';
 
 const { initTheme } = useTheme();
@@ -10,6 +11,7 @@ initTheme();
 <template>
   <div class="app-root">
     <RouterView />
+    <Toast />
   </div>
 </template>
 

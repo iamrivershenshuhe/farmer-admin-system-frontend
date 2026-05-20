@@ -1,8 +1,7 @@
 /**
  * Staff API（人員管理）
  *
- * TODO: 後端整合後替換各函式實作
- * 目前皆為 stub，實際資料由 stores/staff.ts 提供
+ * 對外端口清單；契約與資料形狀見 `src/types/staff.ts` 與 `docs/CONTEXT.md` §4。
  */
 
 import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';
@@ -18,19 +17,13 @@ import { httpClient } from '@/utils/request';
  */
 export const getStaff = async (
   params?: PaginationParams & {
-    department?: string;
+    departmentId?: string;
     role?: UserRole;
     active?: boolean;
     keyword?: string;
   }
 ): Promise<ApiResponse<PaginationResponse<UserInfo>>> =>
   httpClient.get<PaginationResponse<UserInfo>>('/staff', { params });
-
-/**
- * 取得單一人員
- */
-export const getStaffById = async (id: string): Promise<ApiResponse<UserInfo>> =>
-  httpClient.get<UserInfo>(`/staff/${id}`);
 
 /**
  * 取得所有可作為部門主管的人員（供下拉選單使用）
@@ -49,7 +42,6 @@ export const createStaff = async (data: {
   username: string;
   name?: string;
   role: UserRole;
-  department?: string;
   departmentId?: string | null;
   businessTypeIds?: string[];
   password: string;
@@ -61,7 +53,7 @@ export const createStaff = async (data: {
  */
 export const updateStaff = async (
   id: string,
-  data: Partial<Pick<UserInfo, 'name' | 'department' | 'departmentId' | 'businessTypeIds'>>
+  data: Partial<Pick<UserInfo, 'name' | 'departmentId' | 'businessTypeIds'>>
 ): Promise<ApiResponse<UserInfo>> => httpClient.put<UserInfo>(`/staff/${id}`, data);
 
 /**

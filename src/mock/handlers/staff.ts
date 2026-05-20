@@ -2,8 +2,15 @@ import { http, HttpResponse } from 'msw';
 
 import type { UserInfo, UserRole } from '@/types/user';
 
+import { mockDepartments } from '../department';
 import { DEFAULT_PASSWORD, mockUsers } from '../staff';
 import { fail, ok, paginate, readPageQuery, sortList } from './_helpers';
+
+/** 由 departmentId 查 mock 部門名稱（建立/更新人員時同步 entity.department 顯示欄位） */
+function lookupDeptName(deptId: string | null | undefined): string {
+  if (!deptId) return '';
+  return mockDepartments.find((d) => d.id === deptId)?.name ?? '';
+}
 
 export const staffHandlers = [
   // 人員列表（分頁／篩選／排序）
@@ -11,7 +18,7 @@ export const staffHandlers = [
     const url = new URL(request.url);
     const q = readPageQuery(url);
     const keyword = url.searchParams.get('keyword')?.trim().toLowerCase();
-    const department = url.searchParams.get('department') ?? undefined;
+    const departmentId = url.searchParams.get('departmentId') ?? undefined;
     const role = url.searchParams.get('role') ?? undefined;
     const activeParam = url.searchParams.get('active');
 
@@ -23,7 +30,7 @@ export const staffHandlers = [
           (u.name ?? '').toLowerCase().includes(keyword)
       );
     }
-    if (department) list = list.filter((u) => u.department === department);
+    if (departmentId) list = list.filter((u) => u.departmentId === departmentId);
     if (role) list = list.filter((u) => u.role === role);
     if (activeParam != null) list = list.filter((u) => u.active === (activeParam === 'true'));
 
@@ -55,8 +62,9 @@ export const staffHandlers = [
       username: body.username ?? '',
       name: body.name,
       role: body.role ?? 'user',
-      department: body.department ?? '',
       departmentId: body.departmentId ?? null,
+      // entity 的 department(顯示名)由 departmentId 查 mock 部門得出，不再由 client 提供
+      department: lookupDeptName(body.departmentId),
       businessTypeIds: body.businessTypeIds ?? [],
       active: true,
       mustChangePassword: body.mustChangePassword ?? true,
@@ -71,7 +79,12 @@ export const staffHandlers = [
     const body = (await request.json()) as Partial<UserInfo>;
     const idx = mockUsers.findIndex((u) => u.id === params.id);
     if (idx === -1) return HttpResponse.json(fail(20004, '人員不存在'), { status: 404 });
-    mockUsers[idx] = { ...mockUsers[idx], ...body };
+    // 若 payload 帶了 departmentId，同步重算顯示用 department 名稱（避免 entity 兩欄漂移）
+    const patch: Partial<UserInfo> = { ...body };
+    if ('departmentId' in body) {
+      patch.department = lookupDeptName(body.departmentId);
+    }
+    mockUsers[idx] = { ...mockUsers[idx], ...patch };
     return HttpResponse.json(ok(mockUsers[idx]));
   }),
 

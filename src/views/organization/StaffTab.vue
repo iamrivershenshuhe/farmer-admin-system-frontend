@@ -16,7 +16,7 @@
       </template>
       <template #filters>
         <FilterSelect
-          :model-value="store.filters.department ?? ''"
+          :model-value="store.filters.departmentId ?? ''"
           :options="departmentOptions"
           placeholder="全部部門"
           @update:model-value="setDept"
@@ -142,7 +142,7 @@ const departmentOptions = computed(() =>
   departmentStore.departments
     .filter((d) => d.active)
     .map((d) => ({
-      value: d.name,
+      value: d.id,
       label: d.name,
     }))
 );
@@ -176,7 +176,7 @@ const onSearch = (value: string) => {
 };
 const setDept = (v: string) => {
   clearSelection();
-  store.setFilters({ department: v || undefined });
+  store.setFilters({ departmentId: v || undefined });
 };
 const setRole = (v: string) => {
   clearSelection();
@@ -192,7 +192,7 @@ const setStatus = (v: string) => {
 const hasActiveFilter = computed(
   () =>
     !!store.filters.keyword ||
-    !!store.filters.department ||
+    !!store.filters.departmentId ||
     !!store.filters.role ||
     store.filters.active !== undefined
 );
@@ -229,7 +229,6 @@ const handleSubmit = async (data: {
   username: string;
   name?: string;
   role: UserRole | '';
-  department: string;
   departmentId: string;
   businessTypeIds: string[];
   password?: string;
@@ -239,7 +238,6 @@ const handleSubmit = async (data: {
     if (selected.value) {
       await store.updateStaff(selected.value.id, {
         name: data.name,
-        department: data.department,
         departmentId: data.departmentId || null,
         businessTypeIds: data.businessTypeIds,
       });
@@ -248,7 +246,6 @@ const handleSubmit = async (data: {
         username: data.username,
         name: data.name,
         role: data.role as UserRole,
-        department: data.department || undefined,
         departmentId: data.departmentId || null,
         businessTypeIds: data.businessTypeIds,
         password: data.password ?? '',

@@ -21,3 +21,20 @@ export function intersectByFacet(
   const facetSet = new Set(facetIds);
   return candidates.filter((id) => facetSet.has(id));
 }
+
+/**
+ * 物件版:依 facets 過濾候選物件,保留結構欄位(active/description 等)。
+ *
+ * 適用情境:當下拉需要顯示業務別名稱、是否啟用等資訊,直接傳物件清單,
+ * 不想為了套 helper 而 map→ID→lookup 來回。
+ *
+ * @example e-form user 角色業務別過濾
+ *   const options = filterByFacet(deptBusinessTypes.value, user.businessTypeIds)
+ */
+export function filterByFacet<T extends { id: string }>(
+  candidates: readonly T[],
+  facetIds: readonly string[]
+): T[] {
+  const facetSet = new Set(facetIds);
+  return candidates.filter((item) => facetSet.has(item.id));
+}

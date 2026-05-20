@@ -14,15 +14,17 @@ import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse 
 
 import { API_BASE_URL, API_VERSION } from '@/config';
 import type { ApiResponse } from '@/types';
+import { ApiError } from '@/types/api';
 
 class HttpClient {
   private instance: AxiosInstance;
 
   /**
-   * 401 處理競態鎖：並發請求同時收到 401 時，
-   * 僅第一個觸發「清除狀態 + 導向登入」，其餘略過避免重複跳轉。
+   * 401 處理競態鎖（單例 promise）：並發請求同時收到 401 時，
+   * 僅第一個建立 promise；其餘共享同一 promise 不重觸發。
+   * 完成（成功或失敗）後置回 null，下次 401 才會再次處理。
    */
-  private isSessionExpiring = false;
+  private sessionExpiryPromise: Promise<void> | null = null;
 
   constructor() {
     this.instance = axios.create({
@@ -63,7 +65,14 @@ class HttpClient {
           if (import.meta.env.DEV) {
             console.error(`[API 業務錯誤] code=${data.code}`, data.message);
           }
-          return Promise.reject(new Error(data.message || '請求失敗'));
+          // 拋出型別化錯誤；ApiError extends Error，向後相容 (error instanceof Error / error.message)
+          return Promise.reject(
+            new ApiError({
+              httpStatus: response.status ?? null,
+              code: data.code,
+              message: data.message || '請求失敗',
+            })
+          );
         }
 
         return response;
@@ -108,24 +117,26 @@ class HttpClient {
     switch (status) {
       case 401:
         // Token 無效或過期：清除憑證並導向登入頁。
-        // 競態鎖確保並發 401 只處理一次（避免重複清除與重複跳轉）。
-        if (this.isSessionExpiring) {
+        // 單例 promise 鎖：並發 401 共享同一作業，避免重複清除與重複跳轉。
+        if (this.sessionExpiryPromise) {
           break;
         }
-        this.isSessionExpiring = true;
         // 先清 Pinia 狀態（持久化外掛會連動寫回 storage），再顯式清 localStorage 作雙保險；
         // 全程 lazy import 避免與 store / router 形成循環依賴。
-        Promise.all([import('@/stores/auth'), import('@/stores/user'), import('@/router')])
-          .then(([{ useAuthStore }, { useUserStore }, { default: router }]) => {
-            useAuthStore().clearToken();
-            useUserStore().clearUser();
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('user-info');
-            return router.push('/login');
-          })
-          .finally(() => {
-            this.isSessionExpiring = false;
-          });
+        this.sessionExpiryPromise = (async () => {
+          const [{ useAuthStore }, { useUserStore }, { default: router }] = await Promise.all([
+            import('@/stores/auth'),
+            import('@/stores/user'),
+            import('@/router'),
+          ]);
+          useAuthStore().clearToken();
+          useUserStore().clearUser();
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user-info');
+          await router.push('/login');
+        })().finally(() => {
+          this.sessionExpiryPromise = null;
+        });
         break;
 
       case 403:

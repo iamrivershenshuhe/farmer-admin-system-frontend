@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 
 import {
   batchDeleteBusinessTypes,
@@ -11,6 +11,7 @@ import {
   setBusinessTypeActive,
   updateBusinessType as apiUpdate,
 } from '@/api/business-type';
+import { useListController } from '@/composables/useListController';
 import type {
   BusinessType,
   CreateBusinessTypePayload,
@@ -36,11 +37,19 @@ const DEFAULT_FILTERS: Filters = {
 /**
  * 業務別狀態 — 薄層，server 驅動（對齊 stores/knowledge.ts）。
  *
- * - `businessTypesByDept`：依部門快取，供知識庫 / 電子表單連動下拉與下鑽（向後相容）
- * - `list` 等：業務別管理 tab 的跨部門分頁／篩選／排序結果
+ * 兩條資料路徑：
+ * - `businessTypesByDept`：依部門快取（per-key、lazy fetch），供知識庫/電子表單/staff modal 連動下拉與下鑽
+ * - `list` 等：跨部門分頁／篩選／排序（管理 tab）
+ *
+ * **設計例外**（見 ADR-0007 F6、baseline/business-type/contract.json）：
+ *   useListController 僅吸收**分頁 tab** 部分；`businessTypesByDept` 是 per-key 快取，
+ *   與 ctrl.allOptions（單一全量陣列）語意不匹配，故原樣保留。
+ *   強行映射會失去 lazy/per-key 行為，違反「行為零變動」紅線。
+ *
+ * 對外名稱與行為完全沿用既有契約（見 baseline contract）。
  */
 export const useBusinessTypeStore = defineStore('business-type', () => {
-  // ── 向後相容：依部門快取 ───────────────────────────────────
+  // ── 依部門快取（per-key,lazy fetch；不走 useListController）────
   const businessTypesByDept = ref<Record<string, BusinessType[]>>({});
   const isLoadingByDept = ref<Record<string, boolean>>({});
 
@@ -55,65 +64,56 @@ export const useBusinessTypeStore = defineStore('business-type', () => {
     }
   }
 
-  // ── 業務別管理 tab：跨部門 server 驅動 ──────────────────────
-  const list = ref<BusinessType[]>([]);
-  const total = ref(0);
-  const currentPage = ref(1);
-  const pageSize = ref(20);
-  const totalPages = ref(1);
-  const isListLoading = ref(false);
-  const filters = ref<Filters>({ ...DEFAULT_FILTERS });
+  // ── 跨部門分頁 tab（走 useListController，ADR-0003）─────────────
+  const ctrl = useListController<BusinessType, Filters>({
+    fetcher: async ({ page, pageSize, filters }) => {
+      const res = await getBusinessTypes({ page, pageSize, ...filters });
+      return res.data;
+    },
+    initialFilters: { ...DEFAULT_FILTERS },
+    defaultPageSize: 20,
+  });
 
-  const startIndex = computed(() =>
-    total.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
-  );
-  const endIndex = computed(() => Math.min(currentPage.value * pageSize.value, total.value));
+  // 對外名稱對齊既有 view callsites
+  const list = ctrl.items;
+  const total = ctrl.total;
+  const currentPage = ctrl.currentPage;
+  const pageSize = ctrl.pageSize;
+  const totalPages = ctrl.totalPages;
+  const isListLoading = ctrl.isLoading;
+  const filters = ctrl.filters;
+  const startIndex = ctrl.startIndex;
+  const endIndex = ctrl.endIndex;
 
-  async function fetchList(): Promise<void> {
-    isListLoading.value = true;
-    try {
-      const res = await getBusinessTypes({
-        page: currentPage.value,
-        pageSize: pageSize.value,
-        ...filters.value,
-      });
-      const d = res.data;
-      list.value = d.items;
-      total.value = d.total;
-      currentPage.value = d.page;
-      pageSize.value = d.pageSize;
-      totalPages.value = d.totalPages;
-    } finally {
-      isListLoading.value = false;
-    }
+  function fetchList(): Promise<void> {
+    return ctrl.fetchPage();
   }
 
   function setPage(page: number): Promise<void> {
-    currentPage.value = page;
-    return fetchList();
+    return ctrl.setPage(page);
   }
+
   function setPageSize(size: number): Promise<void> {
-    pageSize.value = size;
-    currentPage.value = 1;
-    return fetchList();
+    return ctrl.setPageSize(size);
   }
+
   function setFilters(patch: Partial<Filters>): Promise<void> {
-    filters.value = { ...filters.value, ...patch };
-    currentPage.value = 1;
-    return fetchList();
+    return ctrl.setFilters(patch);
   }
+
   function setSort(sortBy: string): Promise<void> {
+    // 行為保留:asc-first toggle(同 department,與 knowledge desc-first 相反)
     const order =
       filters.value.sortBy === sortBy && filters.value.sortOrder === 'asc' ? 'desc' : 'asc';
     return setFilters({ sortBy, sortOrder: order });
   }
+
   function resetFilters(): Promise<void> {
-    filters.value = { ...DEFAULT_FILTERS };
-    currentPage.value = 1;
-    return fetchList();
+    return ctrl.resetFilters();
   }
 
-  /** 重新整理：清掉受影響部門快取並刷新跨部門清單 */
+  // ── Mutations(跨兩條資料路徑,需手動同步)────────────────────
+  /** 重新整理:清掉受影響部門快取並刷新跨部門清單 */
   async function refresh(deptId?: string): Promise<void> {
     if (deptId) delete businessTypesByDept.value[deptId];
     await fetchList();
@@ -126,6 +126,7 @@ export const useBusinessTypeStore = defineStore('business-type', () => {
     await apiCreate({ ...payload, departmentId: deptId });
     await refresh(deptId);
   }
+
   async function updateBusinessType(
     btId: string,
     deptId: string,
@@ -135,20 +136,25 @@ export const useBusinessTypeStore = defineStore('business-type', () => {
     await apiUpdate(btId, { ...payload, departmentId: deptId });
     await refresh(deptId);
   }
+
   /** 受守門硬刪除：仍被指派時 httpClient reject，由 view 接住顯示 inline */
   async function deleteBusinessType(btId: string, deptId: string): Promise<void> {
     await apiDelete(btId);
     await refresh(deptId);
   }
+
   async function setActive(id: string, active: boolean, deptId?: string): Promise<void> {
     await setBusinessTypeActive(id, active);
     await refresh(deptId);
   }
+
   async function batchSetActive(ids: string[], active: boolean): Promise<void> {
     await batchSetBusinessTypeActive(ids, active);
+    // 行為保留:整個 per-dept 快取一次失效(粗但與舊版一致)
     businessTypesByDept.value = {};
     await fetchList();
   }
+
   async function batchDelete(ids: string[]): Promise<void> {
     await batchDeleteBusinessTypes(ids);
     businessTypesByDept.value = {};
@@ -156,7 +162,7 @@ export const useBusinessTypeStore = defineStore('business-type', () => {
   }
 
   return {
-    // 向後相容
+    // 向後相容(per-key 快取)
     businessTypesByDept,
     isLoadingByDept,
     fetchBusinessTypes,

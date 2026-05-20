@@ -13,6 +13,26 @@ export const useChatStore = defineStore(
     const isLoading = ref<boolean>(false);
     const error = ref<string | null>(null);
 
+    // 進行中的假串流 timer：以 conversationId 為鍵，
+    // 讓 deleteConversation / 同會話新訊息可主動清掉舊 timer，避免在已釋放訊息物件上 mutate。
+    const streamingTimers = new Map<string, ReturnType<typeof setInterval>>();
+
+    /**
+     * 取消串流：指定 conversationId 則只清該會話；省略則全部清。
+     */
+    const cancelStreaming = (conversationId?: string): void => {
+      if (conversationId !== undefined) {
+        const t = streamingTimers.get(conversationId);
+        if (t) {
+          clearInterval(t);
+          streamingTimers.delete(conversationId);
+        }
+        return;
+      }
+      streamingTimers.forEach((t) => clearInterval(t));
+      streamingTimers.clear();
+    };
+
     /**
      * 創建新對話（本地）
      */
@@ -41,6 +61,8 @@ export const useChatStore = defineStore(
      */
     const deleteConversation = async (conversationId: string): Promise<void> => {
       try {
+        // 清掉此會話進行中的假串流 timer，避免在已釋放訊息物件上繼續 mutate
+        cancelStreaming(conversationId);
         // httpClient.delete(`/chat/conversations/${conversationId}`)
         // 本地刪除
         const index = conversations.value.findIndex((c) => c.id === conversationId);
@@ -152,6 +174,8 @@ export const useChatStore = defineStore(
         // 取消 loading（typing indicator 隱藏，改由 isStreaming 在 message 上呈現游標）
         isLoading.value = false;
 
+        // 同會話若有舊串流還在跑（理論上 UI 會擋,防禦性清理）
+        cancelStreaming(conversationId);
         await new Promise<void>((resolve) => {
           let cursor = 0;
           const target = conversation.messages[conversation.messages.length - 1];
@@ -161,11 +185,13 @@ export const useChatStore = defineStore(
               target.content = fullContent;
               target.isStreaming = false;
               clearInterval(timer);
+              streamingTimers.delete(conversationId);
               resolve();
               return;
             }
             target.content = fullContent.slice(0, cursor);
           }, STREAM_INTERVAL_MS);
+          streamingTimers.set(conversationId, timer);
         });
       } catch (err) {
         error.value = err instanceof Error ? err.message : 'AI 回覆失敗';
@@ -208,6 +234,7 @@ export const useChatStore = defineStore(
       deleteConversation,
       sendMessage,
       loadConversations,
+      cancelStreaming,
     };
   },
   {

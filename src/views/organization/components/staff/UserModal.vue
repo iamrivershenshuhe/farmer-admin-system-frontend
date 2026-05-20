@@ -42,9 +42,9 @@
           <span v-else class="req-soft">·系統管理員可不限部門</span>
         </label>
         <span class="select-wrap">
-          <select v-model="formData.department" class="select-field">
+          <select v-model="formData.departmentId" class="select-field">
             <option value="">{{ formData.role === 'admin' ? '不限部門' : '請選擇部門' }}</option>
-            <option v-for="dept in availableDepartments" :key="dept.id" :value="dept.name">
+            <option v-for="dept in availableDepartments" :key="dept.id" :value="dept.id">
               {{ dept.name }}
             </option>
           </select>
@@ -55,7 +55,7 @@
         <label class="field-label"
           >業務範圍 <span class="req-soft">·依部門連動，可多選</span></label
         >
-        <div v-if="!selectedDeptId" class="bt-hint">請先選擇部門</div>
+        <div v-if="!formData.departmentId" class="bt-hint">請先選擇部門</div>
         <div v-else-if="!deptBts.length" class="bt-hint">此部門無業務別</div>
         <div v-else class="bt-checklist">
           <label v-for="bt in deptBts" :key="bt.id" class="bt-check">
@@ -104,12 +104,13 @@ import { usePermission } from '@/composables/usePermission';
 import { useBusinessTypeStore } from '@/stores/business-type';
 import { useDepartmentStore } from '@/stores/department';
 import type { UserInfo, UserRole } from '@/types/user';
+import { nonAdminRequiresDepartment, nonEmptyString } from '@/utils/validators';
 
 interface UserFormData {
   username: string;
   name?: string;
   role: UserRole | '';
-  department: string;
+  /** ADR-0006 R2: 表單只持有 departmentId(id);name 只在 entity 顯示用 */
   departmentId: string;
   businessTypeIds: string[];
   password?: string;
@@ -145,7 +146,6 @@ const defaultFormData: UserFormData = {
   username: '',
   name: '',
   role: '',
-  department: '',
   departmentId: '',
   businessTypeIds: [],
   password: '',
@@ -155,32 +155,35 @@ const defaultFormData: UserFormData = {
 const formData = ref<UserFormData>({ ...defaultFormData });
 const errorMessage = ref('');
 
-// 部門名稱 → ID（業務別依部門 ID 連動）
-const selectedDeptId = computed(
-  () => availableDepartments.value.find((d) => d.name === formData.value.department)?.id ?? ''
-);
-
+// 業務別依部門 ID 連動（formData.departmentId 即為下拉所選 dept 的 id）
 const deptBts = computed(() =>
-  selectedDeptId.value ? (businessTypeStore.businessTypesByDept[selectedDeptId.value] ?? []) : []
+  formData.value.departmentId
+    ? (businessTypeStore.businessTypesByDept[formData.value.departmentId] ?? [])
+    : []
 );
 
 // 安全契約：非 admin 帳號必須有部門（避免無部門非 admin 觸發越權哨兵；見 domain.md）
+// 規則集中於 utils/validators（ADR-0004）
 const isFormValid = computed(
   () =>
-    formData.value.username.trim() !== '' &&
-    formData.value.role !== '' &&
-    (formData.value.role === 'admin' || formData.value.department !== '')
+    nonEmptyString(formData.value.username) === null &&
+    nonEmptyString(formData.value.role) === null &&
+    nonAdminRequiresDepartment(formData.value.role || null, formData.value.departmentId || null) ===
+      null
 );
 
 // 部門變更：載入該部門業務別，清掉不屬於新部門的已選項
-watch(selectedDeptId, (id, prev) => {
-  if (id) businessTypeStore.fetchBusinessTypes(id);
-  if (prev !== undefined && id !== prev) {
-    formData.value.businessTypeIds = formData.value.businessTypeIds.filter((bid) =>
-      (businessTypeStore.businessTypesByDept[id] ?? []).some((b) => b.id === bid)
-    );
+watch(
+  () => formData.value.departmentId,
+  (id, prev) => {
+    if (id) businessTypeStore.fetchBusinessTypes(id);
+    if (prev !== undefined && id !== prev) {
+      formData.value.businessTypeIds = formData.value.businessTypeIds.filter((bid) =>
+        (businessTypeStore.businessTypesByDept[id] ?? []).some((b) => b.id === bid)
+      );
+    }
   }
-});
+);
 
 watch(
   () => props.user,
@@ -190,7 +193,6 @@ watch(
           username: user.username,
           name: user.name || '',
           role: user.role,
-          department: user.department || '',
           departmentId: user.departmentId ?? '',
           businessTypeIds: [...(user.businessTypeIds ?? [])],
           password: '',
@@ -198,7 +200,9 @@ watch(
         }
       : { ...defaultFormData, businessTypeIds: [] };
     errorMessage.value = '';
-    if (selectedDeptId.value) businessTypeStore.fetchBusinessTypes(selectedDeptId.value);
+    if (formData.value.departmentId) {
+      businessTypeStore.fetchBusinessTypes(formData.value.departmentId);
+    }
   },
   { immediate: true }
 );
@@ -211,7 +215,7 @@ const toggleBt = (id: string) => {
 const handleSubmit = () => {
   if (!isFormValid.value) return;
   errorMessage.value = '';
-  emit('submit', { ...formData.value, departmentId: selectedDeptId.value });
+  emit('submit', { ...formData.value });
 };
 
 const handleClose = () => {

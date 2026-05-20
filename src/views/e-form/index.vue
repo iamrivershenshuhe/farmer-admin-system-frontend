@@ -107,7 +107,7 @@ import { useBusinessTypeStore } from '@/stores/business-type';
 import { useDepartmentStore } from '@/stores/department';
 import { useEFormStore } from '@/stores/eform';
 import { useUserStore } from '@/stores/user';
-import type { ApplicantFieldDef, GeneratedFile } from '@/types/form';
+import type { ApplicantFieldDef, GeneratedFile } from '@/types/eform';
 
 import ApplicantForm from './components/ApplicantForm.vue';
 import BusinessSelector from './components/BusinessSelector.vue';

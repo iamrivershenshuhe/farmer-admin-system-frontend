@@ -159,6 +159,7 @@ import { useDepartmentStore } from '@/stores/department';
 import { useKnowledgeStore } from '@/stores/knowledge';
 import type { DocType, KnowledgeDocument, UploadKnowledgeDocumentRequest } from '@/types/knowledge';
 import { DOC_TYPE_LABELS, DOCUMENT_STATUS_LABELS, DocumentStatus } from '@/types/knowledge';
+import { intersectByFacet } from '@/utils/cascadeFilter';
 
 import DocumentTable from './components/DocumentTable.vue';
 import DocumentDetailModal from './components/modals/DocumentDetailModal.vue';
@@ -217,13 +218,21 @@ const departmentFilterOptions = computed(() =>
     .map((d) => ({ value: d.id, label: d.name.replace(/^農會/, '') }))
 );
 
-// 業務別選項 = 可見範圍 facets 內出現的業務別；名稱經組織模組解析（fallback 顯 id）。
-const businessTypeFilterOptions = computed(() =>
-  knowledgeStore.facets.businessTypeIds.map((id) => ({
+// 業務別選項:
+//   - 未選部門 → facets 全集(可見範圍內所有有文件的業務別)
+//   - 已選部門 → 該部門下業務別 ∩ facets(階層內 + 有文件)
+// 名稱經組織模組解析（fallback 顯 id）。
+const businessTypeFilterOptions = computed(() => {
+  const facetIds = knowledgeStore.facets.businessTypeIds;
+  const deptId = filters.value.departmentId;
+  const candidates = deptId
+    ? (businessTypeStore.businessTypesByDept[deptId] ?? []).map((b) => b.id)
+    : facetIds;
+  return intersectByFacet(candidates, facetIds).map((id) => ({
     value: id,
     label: btNameMap.value[id] ?? id,
-  }))
-);
+  }));
+});
 
 // 狀態選項依 facets，固定順序（已就緒 → 上傳中 → 處理中 → 錯誤）；標籤用集中來源
 const statusOptions = computed(() =>

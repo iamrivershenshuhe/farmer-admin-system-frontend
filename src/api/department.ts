@@ -1,8 +1,7 @@
 /**
  * Department API（部門管理）
  *
- * TODO: 後端整合後替換各函式實作
- * 目前皆為 stub，實際資料由 stores/department.ts 提供
+ * 對外端口清單；契約與資料形狀見 `src/types/department.ts` 與 `docs/CONTEXT.md` §4。
  */
 
 import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';
@@ -20,12 +19,6 @@ export const getDepartments = async (
   params?: PaginationParams & { active?: boolean }
 ): Promise<ApiResponse<PaginationResponse<Department>>> =>
   httpClient.get<PaginationResponse<Department>>('/departments', { params });
-
-/**
- * 取得單一部門
- */
-export const getDepartment = async (id: string): Promise<ApiResponse<Department>> =>
-  httpClient.get<Department>(`/departments/${id}`);
 
 // ---------------------------------------------------------------------------
 // 新增 / 更新 / 刪除

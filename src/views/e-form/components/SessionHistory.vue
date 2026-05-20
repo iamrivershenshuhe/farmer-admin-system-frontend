@@ -120,7 +120,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
-import type { GetSessionsParams } from '@/api/form';
+import type { GetSessionsParams } from '@/api/eform';
 import IconBtn from '@/components/base/IconBtn.vue';
 import Accordion from '@/components/common/Accordion.vue';
 import FileTypeBadge from '@/components/common/FileTypeBadge.vue';

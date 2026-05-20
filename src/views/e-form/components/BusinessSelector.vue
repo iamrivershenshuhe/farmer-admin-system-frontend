@@ -88,7 +88,8 @@ import { useBusinessTypeStore } from '@/stores/business-type';
 import { useDepartmentStore } from '@/stores/department';
 import { useEFormStore } from '@/stores/eform';
 import type { BusinessType } from '@/types/department';
-import type { EFormTemplate } from '@/types/form';
+import type { EFormTemplate } from '@/types/eform';
+import { filterByFacet } from '@/utils/cascadeFilter';
 
 interface Props {
   selectedBusinessId: string;
@@ -166,8 +167,7 @@ const businessTypeOptions = computed((): BusinessType[] => {
     return deptBusinessTypes.value;
   }
   // user：僅被分配的業務別 ∩ 該部門業務別
-  const allowed = new Set(props.userBusinessTypeIds);
-  return deptBusinessTypes.value.filter((b) => allowed.has(b.id));
+  return filterByFacet(deptBusinessTypes.value, props.userBusinessTypeIds);
 });
 
 /** 業務別下拉選項（FilterSelect 格式） */

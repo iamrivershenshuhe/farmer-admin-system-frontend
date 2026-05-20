@@ -103,3 +103,47 @@ export enum ApiErrorCode {
   /** 未知錯誤 */
   UNKNOWN = 99999,
 }
+
+/**
+ * 型別化 API 錯誤
+ *
+ * 由 httpClient 攔截器（業務碼 !== 0）拋出，取代裸 `Error`，
+ * 讓上層可依 `code` / `httpStatus` 分流處理。
+ *
+ * 設計約束：
+ *  - extends Error：既有 `error instanceof Error`、`error.message` 讀法完全相容
+ *  - 提供 `isApiError` 靜態守衛，避免散落 instanceof 樣板
+ *
+ * @see docs/adr/0005-notification-error-contract.md
+ */
+export class ApiError extends Error {
+  /** HTTP 狀態碼；無 response（網路錯誤/timeout）為 null */
+  readonly httpStatus: number | null;
+  /** 業務碼（{@link ApiErrorCode}）；非業務錯誤為 null */
+  readonly code: number | null;
+  /** 後端附帶的補充資料（如欄位錯誤映射） */
+  readonly details?: unknown;
+  /** 原始錯誤（如 AxiosError），保留供除錯 */
+  readonly origin?: unknown;
+
+  constructor(opts: {
+    httpStatus: number | null;
+    code: number | null;
+    message: string;
+    details?: unknown;
+    origin?: unknown;
+  }) {
+    super(opts.message);
+    this.name = 'ApiError';
+    this.httpStatus = opts.httpStatus;
+    this.code = opts.code;
+    this.details = opts.details;
+    this.origin = opts.origin;
+    // 確保 instanceof ApiError 在繼承 Error 後仍有效（TS target ES5 兼容）
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+
+  static isApiError(err: unknown): err is ApiError {
+    return err instanceof ApiError;
+  }
+}

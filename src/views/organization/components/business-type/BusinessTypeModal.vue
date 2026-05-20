@@ -61,6 +61,7 @@ import type {
   CreateBusinessTypePayload,
   UpdateBusinessTypePayload,
 } from '@/types/business-type';
+import { businessTypeRequiresDepartment, nonEmptyString } from '@/utils/validators';
 
 interface DeptOption {
   value: string;
@@ -103,7 +104,12 @@ const statusModel = computed({
   },
 });
 
-const isFormValid = computed(() => formData.value.name.trim() !== '' && departmentId.value !== '');
+// 規則集中於 utils/validators（ADR-0004）
+const isFormValid = computed(
+  () =>
+    nonEmptyString(formData.value.name) === null &&
+    businessTypeRequiresDepartment(departmentId.value) === null
+);
 
 watch(
   [() => props.businessType, () => props.modelValue],

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 
 import {
   batchDeleteStaff,
@@ -13,11 +13,13 @@ import {
   updateStaff as apiUpdate,
   updateStaffRole as apiUpdateRole,
 } from '@/api/staff';
+import { useListController } from '@/composables/useListController';
 import type { UserInfo, UserRole } from '@/types/user';
 
 interface Filters {
   keyword?: string;
-  department?: string;
+  /** ADR-0006 R2: 邊界以 departmentId(id) 為單一語意,name 僅用於 entity 顯示 */
+  departmentId?: string;
   role?: UserRole;
   active?: boolean;
   sortBy: string;
@@ -26,7 +28,7 @@ interface Filters {
 
 const DEFAULT_FILTERS: Filters = {
   keyword: undefined,
-  department: undefined,
+  departmentId: undefined,
   role: undefined,
   active: undefined,
   sortBy: 'username',
@@ -39,131 +41,141 @@ type UpdatePayload = Parameters<typeof apiUpdate>[1];
 /**
  * 人員狀態 — 薄層，server 驅動（對齊 stores/knowledge.ts）。
  *
- * - `users`：完整清單，供電子表單等模組查詢（向後相容）
- * - `list` 等：人員管理 tab 的分頁／篩選／排序結果
+ * 三條資料路徑:
+ * - `users`:完整清單,供電子表單等模組查詢 → 走 useListController.allOptions
+ * - `list` 等:人員管理 tab 的分頁／篩選／排序 → 走 useListController.items
+ * - `managers`:獨立 /staff/managers endpoint 的結果(非 all 子集,屬 ADR-0007 F6 exception,**原樣保留**)
+ *
+ * 對外名稱與行為完全沿用既有契約（見 baseline/staff/contract.json）。
+ *
+ * T11a 範圍:list-controller 採用 + users/list 雙重狀態合一(內部單一資料源);
+ *           managers 保留;`department` 名稱欄位雙語意問題留 T11b。
  */
 export const useStaffStore = defineStore('staff', () => {
-  // ── 向後相容：完整清單 ─────────────────────────────────────
-  const users = ref<UserInfo[]>([]);
-  const isLoading = ref(false);
-  const managers = ref<UserInfo[]>([]);
-
-  const getUserById = (id: string) => users.value.find((u) => u.id === id);
-  const getUserByUsername = (username: string) => users.value.find((u) => u.username === username);
-  const getUsersByDepartment = (department: string) =>
-    users.value.filter((u) => u.department === department);
-
-  async function fetchStaff(): Promise<void> {
-    isLoading.value = true;
-    try {
+  const ctrl = useListController<UserInfo, Filters>({
+    fetcher: async ({ page, pageSize, filters }) => {
+      const res = await getStaff({ page, pageSize, ...filters });
+      return res.data;
+    },
+    allFetcher: async () => {
+      // 行為保留:全量取 pageSize=999,不帶 filters
       const res = await getStaff({ page: 1, pageSize: 999 });
-      users.value = res.data.items;
-    } finally {
-      isLoading.value = false;
-    }
-  }
+      return res.data.items;
+    },
+    initialFilters: { ...DEFAULT_FILTERS },
+    defaultPageSize: 20,
+  });
+
+  // ── 對外名稱對齊既有 view callsites ─────────────────────────────
+  // 全量(view 用於 lookup 與其他模組查詢)
+  const users = ctrl.allOptions;
+  const isLoading = ctrl.isLoadingAll;
+  // 分頁 tab
+  const list = ctrl.items;
+  const total = ctrl.total;
+  const currentPage = ctrl.currentPage;
+  const pageSize = ctrl.pageSize;
+  const totalPages = ctrl.totalPages;
+  const isListLoading = ctrl.isLoading;
+  const filters = ctrl.filters;
+  const startIndex = ctrl.startIndex;
+  const endIndex = ctrl.endIndex;
+
+  // ── 獨立 endpoint:managers(/staff/managers)─────────────────
+  // 不屬 'all 子集',語意上是 server-side 過濾結果。保留為獨立 ref。
+  const managers = ref<UserInfo[]>([]);
 
   async function fetchManagers(): Promise<void> {
     const res = await getManagers();
     managers.value = res.data;
   }
 
-  // ── 人員管理 tab：server 驅動 ──────────────────────────────
-  const list = ref<UserInfo[]>([]);
-  const total = ref(0);
-  const currentPage = ref(1);
-  const pageSize = ref(20);
-  const totalPages = ref(1);
-  const isListLoading = ref(false);
-  const filters = ref<Filters>({ ...DEFAULT_FILTERS });
+  // ── helpers(對 users 全量查詢)─────────────────────────────
+  const getUserById = (id: string) => users.value.find((u) => u.id === id);
+  const getUserByUsername = (username: string) => users.value.find((u) => u.username === username);
+  const getUsersByDepartment = (department: string) =>
+    users.value.filter((u) => u.department === department);
 
-  const startIndex = computed(() =>
-    total.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1
-  );
-  const endIndex = computed(() => Math.min(currentPage.value * pageSize.value, total.value));
+  // ── Actions ─────────────────────────────────────────────────────
+  function fetchStaff(): Promise<void> {
+    // 行為保留:舊版每次呼叫都重抓(無 dedup)
+    return ctrl.fetchAllOptions(true);
+  }
 
-  async function fetchList(): Promise<void> {
-    isListLoading.value = true;
-    try {
-      const res = await getStaff({
-        page: currentPage.value,
-        pageSize: pageSize.value,
-        ...filters.value,
-      });
-      const d = res.data;
-      list.value = d.items;
-      total.value = d.total;
-      currentPage.value = d.page;
-      pageSize.value = d.pageSize;
-      totalPages.value = d.totalPages;
-    } finally {
-      isListLoading.value = false;
-    }
+  function fetchList(): Promise<void> {
+    return ctrl.fetchPage();
   }
 
   function setPage(page: number): Promise<void> {
-    currentPage.value = page;
-    return fetchList();
+    return ctrl.setPage(page);
   }
+
   function setPageSize(size: number): Promise<void> {
-    pageSize.value = size;
-    currentPage.value = 1;
-    return fetchList();
+    return ctrl.setPageSize(size);
   }
+
   function setFilters(patch: Partial<Filters>): Promise<void> {
-    filters.value = { ...filters.value, ...patch };
-    currentPage.value = 1;
-    return fetchList();
+    return ctrl.setFilters(patch);
   }
+
   function setSort(sortBy: string): Promise<void> {
+    // 行為保留:asc-first toggle
     const order =
       filters.value.sortBy === sortBy && filters.value.sortOrder === 'asc' ? 'desc' : 'asc';
     return setFilters({ sortBy, sortOrder: order });
   }
+
   function resetFilters(): Promise<void> {
-    filters.value = { ...DEFAULT_FILTERS };
-    currentPage.value = 1;
-    return fetchList();
+    return ctrl.resetFilters();
   }
 
   async function createStaff(data: CreatePayload): Promise<void> {
     await apiCreate(data);
+    // 行為保留:不自動 invalidate users 全量
     await fetchList();
   }
+
   async function updateStaff(id: string, data: UpdatePayload): Promise<void> {
     await apiUpdate(id, data);
     await fetchList();
   }
+
   async function updateStaffRole(id: string, role: UserRole): Promise<void> {
     await apiUpdateRole(id, role);
     await fetchList();
   }
+
   async function resetPassword(
     id: string,
     payload: { newPassword: string; mustChangePassword: boolean }
   ): Promise<void> {
     await apiResetPassword(id, payload);
+    // 行為保留:不重抓 list
   }
+
   /** 受守門硬刪除：仍啟用時 httpClient reject，由 view 接住顯示 inline */
   async function deleteStaff(id: string): Promise<void> {
     await apiDelete(id);
     await fetchList();
   }
+
   async function setActive(id: string, active: boolean): Promise<void> {
     await setStaffActive(id, active);
     await fetchList();
   }
+
   async function batchSetActive(ids: string[], active: boolean): Promise<void> {
     await batchSetStaffActive(ids, active);
     await fetchList();
   }
+
   async function batchDelete(ids: string[]): Promise<void> {
     await batchDeleteStaff(ids);
     await fetchList();
   }
 
   return {
-    // 向後相容
+    // 向後相容(全量)
     users,
     isLoading,
     managers,

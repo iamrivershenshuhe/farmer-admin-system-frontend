@@ -60,6 +60,7 @@ import { computed, ref, watch } from 'vue';
 import BaseModal from '@/components/base/BaseModal.vue';
 import { useStaffStore } from '@/stores/staff';
 import type { Department, DepartmentFormData } from '@/types/department';
+import { nonEmptyString } from '@/utils/validators';
 
 interface Props {
   modelValue: boolean;
@@ -94,8 +95,9 @@ const statusModel = computed({
   },
 });
 
+// 規則集中於 utils/validators（ADR-0004）
 const isFormValid = computed(
-  () => formData.value.code.trim() !== '' && formData.value.name.trim() !== ''
+  () => nonEmptyString(formData.value.code) === null && nonEmptyString(formData.value.name) === null
 );
 
 watch(

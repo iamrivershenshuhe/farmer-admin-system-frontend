@@ -1,4 +1,4 @@
-import type { EFormTemplate, FormFieldCoord, FormSessionRecord } from '@/types/form';
+import type { EFormTemplate, FormFieldCoord, FormSessionRecord } from '@/types/eform';
 
 // 模板 ID 前綴遵循 FT_<BT_ID>_<序號> 命名，businessTypeId 指向組織 BT（BT001…）
 

@@ -1,8 +1,7 @@
 /**
  * Business Type API（業務別管理）
  *
- * TODO: 後端整合後替換各函式實作
- * 目前皆為 stub，實際資料由 stores/business-type.ts 提供
+ * 對外端口清單；契約與資料形狀見 `src/types/business-type.ts` 與 `docs/CONTEXT.md` §4。
  */
 
 import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';

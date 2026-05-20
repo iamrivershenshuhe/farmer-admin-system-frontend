@@ -5,7 +5,7 @@
  * 並補充帳號生命週期專屬 payload（停用/啟用、批次）。
  */
 
-export type { UserFormData, UserInfo, UserRole } from './user';
+export type { UserInfo, UserRole } from './user';
 export { ROLE_LABELS } from './user';
 
 /**

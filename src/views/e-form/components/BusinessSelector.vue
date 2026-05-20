@@ -88,7 +88,7 @@ import { useBusinessTypeStore } from '@/stores/business-type';
 import { useDepartmentStore } from '@/stores/department';
 import { useEFormStore } from '@/stores/eform';
 import type { BusinessType } from '@/types/department';
-import type { EFormTemplate } from '@/types/form';
+import type { EFormTemplate } from '@/types/eform';
 
 interface Props {
   selectedBusinessId: string;

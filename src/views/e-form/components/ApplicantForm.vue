@@ -52,7 +52,7 @@
 import { ref } from 'vue';
 
 import BaseInput from '@/components/base/BaseInput.vue';
-import type { ApplicantFieldDef } from '@/types/form';
+import type { ApplicantFieldDef } from '@/types/eform';
 
 interface Props {
   unionFields: ApplicantFieldDef[];

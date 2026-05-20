@@ -27,7 +27,7 @@ export * from './rag';
 export * from './knowledge';
 
 // 電子表單相關
-export * from './form';
+export * from './eform';
 
 // 通用型別
 export * from './common';

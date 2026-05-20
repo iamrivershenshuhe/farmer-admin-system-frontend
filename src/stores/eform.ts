@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
-import type { GetSessionsParams } from '@/api/form';
-import { generateBatch, getSessions, getTemplates } from '@/api/form';
+import type { GetSessionsParams } from '@/api/eform';
+import { generateBatch, getSessions, getTemplates } from '@/api/eform';
 import { FIELD_DEF_MAP } from '@/config/eform';
 import type { PaginationResponse } from '@/types/api';
 import type {
@@ -11,7 +11,7 @@ import type {
   FormFieldCoord,
   FormSessionRecord,
   GeneratePdfResult,
-} from '@/types/form';
+} from '@/types/eform';
 
 export const useEFormStore = defineStore('eform', () => {
   // State

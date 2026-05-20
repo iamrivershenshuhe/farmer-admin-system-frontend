@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
 
-import type { FormSessionRecord } from '@/types/form';
+import type { FormSessionRecord } from '@/types/eform';
 import type { UserInfo } from '@/types/user';
 
 import { MOCK_TEMPLATES, mockSessions, nextSessionId } from '../eform';

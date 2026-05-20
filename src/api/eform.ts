@@ -4,7 +4,7 @@
  */
 
 import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';
-import type { EFormTemplate, FormSessionRecord, GeneratePdfResult } from '@/types/form';
+import type { EFormTemplate, FormSessionRecord, GeneratePdfResult } from '@/types/eform';
 import { httpClient } from '@/utils/request';
 
 // ---------------------------------------------------------------------------

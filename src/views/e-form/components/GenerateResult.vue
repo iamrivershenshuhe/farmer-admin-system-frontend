@@ -77,7 +77,7 @@
 <script setup lang="ts">
 import BaseButton from '@/components/base/BaseButton.vue';
 import FileTypeBadge from '@/components/common/FileTypeBadge.vue';
-import type { GeneratedFile } from '@/types/form';
+import type { GeneratedFile } from '@/types/eform';
 
 const LABEL_MAP: Record<string, string> = {
   applicant_name: '申請人姓名',

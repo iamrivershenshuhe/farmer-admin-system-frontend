@@ -78,6 +78,8 @@ export enum ApiErrorCode {
   RAG_UPLOAD_FAILED = 30002,
   /** RAG 文件不存在 */
   RAG_DOCUMENT_NOT_FOUND = 30003,
+  /** 30004 — RAG PII 阻擋（block-tier 個資觸發） */
+  RAG_PII_BLOCKED = 30004,
 
   // ─── 4xxxx：知識庫文件 ────────────────────────────────
   /** 文件不存在 */

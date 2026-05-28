@@ -297,10 +297,12 @@ const handleThemeSelect = (value: ThemeMode): void => {
   setTheme(value);
 };
 
-const handleLogout = (): void => {
-  authStore.logout();
-  userStore.clearUser();
+const handleLogout = async (): Promise<void> => {
+  // 後端呼叫採 soft-fail：即使 `/auth/logout` 失敗仍清本地憑證（store 內部處理）。
+  // UI 先收掉選單再 await，避免閃爍；最後跳轉登入頁。
   emit('close');
+  await authStore.logout();
+  userStore.clearUser();
   router.push('/login');
 };
 

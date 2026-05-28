@@ -128,10 +128,10 @@ const togglePasswordVisibility = (field: 'old' | 'new' | 'confirm') => {
 
 /**
  * 返回登入頁面
- * 登出當前使用者並跳轉到登入頁面
+ * 登出當前使用者並跳轉到登入頁面（呼叫後端 `/auth/logout` 撤銷 refresh）
  */
-const backToLogin = () => {
-  authStore.logout();
+const backToLogin = async (): Promise<void> => {
+  await authStore.logout();
   userStore.clearUser();
   router.push('/login');
 };

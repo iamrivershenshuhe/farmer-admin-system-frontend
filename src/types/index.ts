@@ -29,6 +29,9 @@ export * from './knowledge';
 // 電子表單相關
 export * from './eform';
 
+// 稽核相關 (v1.2 新增)
+export * from './audit';
+
 // 通用型別
 export * from './common';
 

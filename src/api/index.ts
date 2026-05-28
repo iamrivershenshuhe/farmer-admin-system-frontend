@@ -2,6 +2,7 @@
  * API 統一導出
  */
 
+export * as auditApi from './audit';
 export * as authApi from './auth';
 export * as businessTypeApi from './business-type';
 export * as chatApi from './chat';

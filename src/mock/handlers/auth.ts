@@ -31,11 +31,13 @@ import { resolvePrincipal } from './_helpers';
 export const authHandlers = [
   // 登入
   http.post('*/api/v1/auth/login', async ({ request }) => {
-    const { username, password } = (await request.json()) as LoginRequest;
-    const user = mockUsers.find((u) => u.username === username);
+    const body = (await request.json()) as LoginRequest;
+    // 同時接受 v1 別名 `username` 與 v1.2 canonical `employeeId`（後端兩者皆受）
+    const employeeId = body.employeeId ?? body.username;
+    const user = mockUsers.find((u) => u.username === employeeId);
 
     // 帳號不存在或密碼不符：統一回相同訊息（不洩漏帳號是否存在）
-    if (!user || password !== DEFAULT_PASSWORD) {
+    if (!user || body.password !== DEFAULT_PASSWORD) {
       return HttpResponse.json({
         code: 10001,
         message: '帳號或密碼錯誤',
@@ -58,11 +60,15 @@ export const authHandlers = [
       code: 0,
       message: 'success',
       data: {
-        // token 帶 username，供 mock handler 模擬後端解析 JWT 識別呼叫者身分
+        // token 帶 username (= employeeId)，供 mock handler 模擬後端解析 JWT 識別呼叫者身分
         accessToken: `mock-access-token.${user.username}`,
-        refreshToken: 'mock-refresh-token',
+        refreshToken: `mock-refresh-token.${user.username}`,
         mustChangePassword: user.mustChangePassword || false,
-        user,
+        user: {
+          ...user,
+          // v1.2 canonical：employeeId 與 username 同值；前端逐步遷移
+          employeeId: user.username,
+        },
       },
       timestamp: Date.now(),
     });
@@ -91,7 +97,9 @@ export const authHandlers = [
     });
   }),
 
-  // 登出
+  // 登出 (POST /auth/logout)
+  // v1.2 API §3.1.4 — 撤銷使用者所有未過期 refresh tokens；access token 自然到期。
+  // Body 可選帶 { refreshToken }；mock 不做實際撤銷，僅回成功。
   http.post('*/api/v1/auth/logout', () => {
     return HttpResponse.json({
       code: 0,
@@ -101,13 +109,33 @@ export const authHandlers = [
     });
   }),
 
-  // 刷新 Token
-  http.post('*/api/v1/auth/refresh', () => {
+  // 刷新 Token (POST /auth/refresh)
+  // v1.2 API §3.1.5 — rotation 強制：必回新 access + 新 refresh，前端必須以新值覆寫。
+  // 失敗時應回 code: 10003 / 10004（mock 預設成功；若需測試失敗路徑可改 body.refreshToken 內容）。
+  http.post('*/api/v1/auth/refresh', async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as { refreshToken?: string };
+
+    // 簡易守門：refreshToken 缺失或不符 mock 格式視為失敗
+    if (!body.refreshToken || !body.refreshToken.startsWith('mock-refresh-token')) {
+      return HttpResponse.json({
+        code: 10004,
+        message: 'Refresh 失敗，請重新登入',
+        data: null,
+        timestamp: Date.now(),
+      });
+    }
+
+    // 解析 username（rotation 後保留同身分）
+    const matched = body.refreshToken.match(/mock-refresh-token\.(.+)$/);
+    const username = matched?.[1] ?? 'admin';
+
     return HttpResponse.json({
       code: 0,
       message: 'success',
       data: {
-        accessToken: 'mock-new-access-token',
+        accessToken: `mock-access-token.${username}`,
+        // rotation 後新 refresh（後綴 timestamp 確保與舊值不同）
+        refreshToken: `mock-refresh-token.${username}`,
       },
       timestamp: Date.now(),
     });

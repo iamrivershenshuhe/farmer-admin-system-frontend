@@ -1,6 +1,12 @@
 import { http, HttpResponse } from 'msw';
 
-import type { FormSessionRecord } from '@/types/eform';
+import type {
+  BulkUpdateFieldsPayload,
+  EFormTemplate,
+  FormFieldCoord,
+  FormSessionRecord,
+  PublishTemplatePayload,
+} from '@/types/eform';
 import type { UserInfo } from '@/types/user';
 
 import { MOCK_TEMPLATES, mockSessions, nextSessionId } from '../eform';
@@ -176,5 +182,192 @@ export const eformHandlers = [
     }
 
     return HttpResponse.json(ENVELOPE(session));
+  }),
+
+  // ===========================================================================
+  // 模板 admin 端點（v1.2 新增）
+  // 對齊 api-spec §3.6.6–§3.6.11；mock 行為僅作型別契約替身，不持久化變更。
+  // ===========================================================================
+
+  // GET /eform/templates/:id — 模板詳情（含 fields[]）
+  http.get('*/api/v1/eform/templates/:id', ({ request, params }) => {
+    const user = resolvePrincipal(request);
+    if (!user) return HttpResponse.json(ENVELOPE(null, 10001, '未登入或 Token 無效'));
+    const template = MOCK_TEMPLATES.find((t) => t.id === params.id);
+    if (!template) return HttpResponse.json(ENVELOPE(null, 50002, '模板不存在'));
+    return HttpResponse.json(
+      ENVELOPE({
+        ...template,
+        // v1.2 canonical: 完整 metadata
+        templateUid: `TMPL-${template.id}`,
+        version: 1,
+        status: 'published' as const,
+        name: template.pdfFileName.replace(/\.pdf$/, ''),
+        departmentId: 'DEPT001',
+        eformBusinessTypeId: template.businessTypeId,
+        pdfFilePath: `rag-forms/dept/${template.id}.pdf`,
+        publishedAt: '2026-04-01T00:00:00Z',
+        createdAt: '2026-03-15T00:00:00Z',
+        updatedAt: '2026-04-01T00:00:00Z',
+      } satisfies EFormTemplate)
+    );
+  }),
+
+  // GET /eform/templates/:id/fields — 僅回 fields[]
+  http.get('*/api/v1/eform/templates/:id/fields', ({ params }) => {
+    const template = MOCK_TEMPLATES.find((t) => t.id === params.id);
+    if (!template) return HttpResponse.json(ENVELOPE(null, 50002, '模板不存在'));
+    return HttpResponse.json(ENVELOPE(template.fields));
+  }),
+
+  // POST /eform/templates — 建立模板（v1.2 新增；multipart/form-data）
+  http.post('*/api/v1/eform/templates', async ({ request }) => {
+    const user = resolvePrincipal(request);
+    if (!user) return HttpResponse.json(ENVELOPE(null, 10001, '未登入或 Token 無效'));
+    if (user.role === 'user') {
+      return HttpResponse.json(ENVELOPE(null, 10002, '無權限建立模板'));
+    }
+
+    // 解析 multipart form data
+    let name = '新模板';
+    let departmentId: string | null = user.departmentId;
+    try {
+      const formData = await request.formData();
+      const fdName = formData.get('name');
+      if (typeof fdName === 'string') name = fdName;
+      const fdDept = formData.get('departmentId');
+      if (typeof fdDept === 'string') departmentId = fdDept;
+    } catch {
+      /* mock: form data 解析失敗仍回模板成功，方便 demo */
+    }
+
+    const newId = `TMPL-${Date.now()}`;
+    return HttpResponse.json(
+      ENVELOPE({
+        id: newId,
+        templateUid: newId,
+        version: 1,
+        status: 'draft' as const,
+        name,
+        departmentId,
+        fields: [
+          // 模擬 OCR + rule_engine 偵測到 2 個欄位
+          {
+            id: `${newId}_F001`,
+            templateId: newId,
+            fieldKey: 'applicant_name',
+            displayLabel: '申請人姓名',
+            label: '申請人姓名',
+            fieldType: 'text' as const,
+            labelBbox: { x1: 183, y1: 117, x2: 263, y2: 157 },
+            fillBbox: { x1: 263, y1: 117, x2: 660, y2: 157 },
+            x1: 263,
+            y1: 117,
+            x2: 660,
+            y2: 157,
+            page: 1,
+            fontSize: 10,
+            maxFontSize: 14,
+            fontColor: '#0000CC',
+            isRequired: true,
+            required: true,
+            priorityOrder: 1,
+            source: 'ocr_rule' as const,
+            confidence: 0.92,
+            sublabels: [],
+          } satisfies FormFieldCoord,
+        ],
+      })
+    );
+  }),
+
+  // PUT /eform/templates/:id/fields — bulk 欄位更新（v1.2 新增）
+  http.put('*/api/v1/eform/templates/:id/fields', async ({ params, request }) => {
+    const user = resolvePrincipal(request);
+    if (!user) return HttpResponse.json(ENVELOPE(null, 10001, '未登入或 Token 無效'));
+
+    const template = MOCK_TEMPLATES.find((t) => t.id === params.id);
+    if (!template) return HttpResponse.json(ENVELOPE(null, 50002, '模板不存在'));
+
+    const body = (await request.json().catch(() => ({}))) as BulkUpdateFieldsPayload;
+    if (!body.fields || !Array.isArray(body.fields)) {
+      return HttpResponse.json(ENVELOPE(null, 20003, 'fields 必為陣列'));
+    }
+
+    // 變動者 source 自動轉 admin_manual
+    const updatedFields = body.fields.map((f) => ({
+      ...f,
+      source: 'admin_manual' as const,
+      confidence: null,
+    }));
+
+    return HttpResponse.json(ENVELOPE({ templateId: params.id as string, fields: updatedFields }));
+  }),
+
+  // PUT /eform/templates/:id/fields/:fieldId/coords — 單欄座標微調（既有 + 強化）
+  http.put('*/api/v1/eform/templates/:id/fields/:fieldId/coords', async ({ params, request }) => {
+    const user = resolvePrincipal(request);
+    if (!user) return HttpResponse.json(ENVELOPE(null, 10001, '未登入或 Token 無效'));
+
+    const template = MOCK_TEMPLATES.find((t) => t.id === params.id);
+    if (!template) return HttpResponse.json(ENVELOPE(null, 50002, '模板不存在'));
+    const field = template.fields.find((f) => f.id === params.fieldId);
+    if (!field) return HttpResponse.json(ENVELOPE(null, 50002, '欄位不存在'));
+
+    const patch = (await request.json().catch(() => ({}))) as Partial<FormFieldCoord>;
+    const updated: FormFieldCoord = {
+      ...field,
+      ...patch,
+      source: 'admin_manual' as const,
+    };
+    return HttpResponse.json(ENVELOPE(updated));
+  }),
+
+  // POST /eform/templates/:id/publish — 發布（v1.2 新增）
+  http.post('*/api/v1/eform/templates/:id/publish', async ({ params, request }) => {
+    const user = resolvePrincipal(request);
+    if (!user) return HttpResponse.json(ENVELOPE(null, 10001, '未登入或 Token 無效'));
+    if (user.role === 'user') {
+      return HttpResponse.json(ENVELOPE(null, 10002, '無權限發布模板'));
+    }
+
+    const template = MOCK_TEMPLATES.find((t) => t.id === params.id);
+    if (!template) return HttpResponse.json(ENVELOPE(null, 50002, '模板不存在'));
+
+    await request.json().catch(() => ({}) as PublishTemplatePayload);
+
+    return HttpResponse.json(
+      ENVELOPE({
+        id: template.id,
+        templateUid: `TMPL-${template.id}`,
+        version: 1,
+        status: 'published' as const,
+        publishedAt: new Date().toISOString(),
+      })
+    );
+  }),
+
+  // GET /eform/templates/:id/preview — Dry-run preview（v1.2 新增）
+  http.get('*/api/v1/eform/templates/:id/preview', ({ params }) => {
+    const template = MOCK_TEMPLATES.find((t) => t.id === params.id);
+    if (!template) return HttpResponse.json(ENVELOPE(null, 50002, '模板不存在'));
+    return HttpResponse.json(
+      ENVELOPE({
+        previewUrl: `/api/v1/eform/download/mock-preview-${template.id}`,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      })
+    );
+  }),
+
+  // DELETE /eform/templates/:id — 軟刪除模板（v1.2 新增）
+  http.delete('*/api/v1/eform/templates/:id', ({ request, params }) => {
+    const user = resolvePrincipal(request);
+    if (!user) return HttpResponse.json(ENVELOPE(null, 10001, '未登入或 Token 無效'));
+    if (user.role === 'user') {
+      return HttpResponse.json(ENVELOPE(null, 10002, '無權限刪除模板'));
+    }
+    const template = MOCK_TEMPLATES.find((t) => t.id === params.id);
+    if (!template) return HttpResponse.json(ENVELOPE(null, 50002, '模板不存在'));
+    return HttpResponse.json(ENVELOPE(null, 0, '模板已下架'));
   }),
 ];

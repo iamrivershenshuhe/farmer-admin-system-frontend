@@ -6,13 +6,23 @@ import type { ChangePasswordResponse, LoginRequest, LoginResponse } from '@/type
 
 /**
  * 認證狀態管理
- * 專注於管理 Token 和登入狀態
+ *
+ * 對齊 v1.2 API 契約 (api-spec.md §3.1)：
+ *  - 持有 access + refresh token 雙憑證（v1.2 起 refresh 強制 rotation）
+ *  - `setToken` 接受 access / refresh 兩參數（refresh 可選；舊呼叫只傳 access 仍兼容）
+ *  - `logout` 呼叫後端 `/auth/logout` 撤銷 refresh，再清本地狀態
+ *    後端不可用時 soft-fail 仍清本地狀態（不卡死使用者）
  */
 export const useAuthStore = defineStore(
   'auth',
   () => {
     // State
     const accessToken = ref<string | null>(null);
+    /**
+     * Refresh token：v1.2 起後端強制提供；前端持久化用於 `POST /auth/refresh`。
+     * 為兼容舊版（無 refresh 流程），仍允許 null。
+     */
+    const refreshToken = ref<string | null>(null);
     const isLoggingIn = ref(false);
 
     // Getters
@@ -20,10 +30,19 @@ export const useAuthStore = defineStore(
 
     // Actions
     /**
-     * 設定 Token
+     * 設定 Token（重載：仅 access 或 access + refresh）
      */
-    const setToken = (token: string): void => {
-      accessToken.value = token;
+    const setToken = (access: string, refresh?: string): void => {
+      accessToken.value = access;
+      if (refresh !== undefined) {
+        refreshToken.value = refresh;
+        // 同步寫 storage（utils/request.ts 的 refresh interceptor 由此讀取）
+        try {
+          localStorage.setItem('refresh_token', refresh);
+        } catch {
+          /* storage unavailable */
+        }
+      }
     };
 
     /**
@@ -31,6 +50,12 @@ export const useAuthStore = defineStore(
      */
     const clearToken = (): void => {
       accessToken.value = null;
+      refreshToken.value = null;
+      try {
+        localStorage.removeItem('refresh_token');
+      } catch {
+        /* storage unavailable */
+      }
     };
 
     /**
@@ -42,7 +67,8 @@ export const useAuthStore = defineStore(
       try {
         const res = await authApi.login(credentials);
         const { data } = res;
-        setToken(data.accessToken);
+        // v1.2 後端在登入回應同時提供 access + refresh；refresh 為選填以兼容 mock
+        setToken(data.accessToken, data.refreshToken);
         return data;
       } finally {
         isLoggingIn.value = false;
@@ -50,10 +76,24 @@ export const useAuthStore = defineStore(
     };
 
     /**
-     * 登出
+     * 登出（呼叫後端撤銷 refresh，再清本地狀態）
+     *
+     * 後端任 4xx / 5xx 視為 soft-fail：仍清憑證避免使用者卡死。
+     * 跳轉至 `/login` 由呼叫端（UserMenu / 路由守衛）負責，本 action 僅負責狀態清理。
      */
-    const logout = (): void => {
-      clearToken();
+    const logout = async (): Promise<void> => {
+      const refresh = refreshToken.value;
+      try {
+        if (refresh) {
+          await authApi.logout({ refreshToken: refresh });
+        } else {
+          await authApi.logout();
+        }
+      } catch {
+        /* soft-fail：後端不可用仍清本地狀態 */
+      } finally {
+        clearToken();
+      }
     };
 
     /**
@@ -76,6 +116,7 @@ export const useAuthStore = defineStore(
     return {
       // State
       accessToken,
+      refreshToken,
       isLoggingIn,
       // Getters
       isAuthenticated,
@@ -90,6 +131,7 @@ export const useAuthStore = defineStore(
   {
     persist: {
       key: 'auth_token',
+      // 只持久化 accessToken；refreshToken 另由 `localStorage.refresh_token` 管理（utils/request.ts）
       pick: ['accessToken'],
     },
   }

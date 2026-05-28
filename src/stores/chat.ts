@@ -153,9 +153,11 @@ export const useChatStore = defineStore(
         const conversation = conversations.value.find((c) => c.id === conversationId);
         if (!conversation) return;
 
+        // v1.2: `content` 為 canonical；保留舊呼叫端的 `query` 別名仍由 sendMessage 內部接收。
+        // 真實 SSE 串流路徑由 `api/chat.sendMessageSse` 提供，未來 v1.3 接 SSE UI 時切換。
         const res = await sendMessageApi({
           conversationId,
-          query: userMessage,
+          content: userMessage,
           useRAG,
         });
 

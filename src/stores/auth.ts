@@ -107,6 +107,10 @@ export const useAuthStore = defineStore(
 
       try {
         const res = await authApi.changePassword({ oldPassword, newPassword });
+        // v1.2：改密觸發 token 輪替，後端附新 access token 時立即覆寫，保住 session
+        if (res.data?.accessToken) {
+          setToken(res.data.accessToken);
+        }
         return res.data;
       } finally {
         isLoggingIn.value = false;

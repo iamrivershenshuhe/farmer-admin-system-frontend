@@ -77,8 +77,13 @@ export interface ChangePasswordRequest {
 
 /**
  * 修改密碼回應
+ *
+ * v1.2 後端在改密成功後可一併簽發新的 access token（密碼變更觸發 JWT 撤銷 /
+ * watermark 輪替），前端須以新值覆寫，確保 session 不被舊 token 立即失效。
  */
 export interface ChangePasswordResponse {
   success: boolean;
   message: string;
+  /** 後端輪替後的新 access token（存在時前端應立即 setToken 覆寫）。 */
+  accessToken?: string;
 }

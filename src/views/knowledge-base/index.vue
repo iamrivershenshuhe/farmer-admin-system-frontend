@@ -334,13 +334,10 @@ const handleUpload = async (payload: UploadKnowledgeDocumentRequest) => {
 const handleSave = async (
   id: string,
   data: {
-    docType: DocType;
-    version: string;
-    departmentId: string | null;
-    businessTypeIds: string[];
     description: string;
   }
 ) => {
+  // 後端 PUT /knowledge/documents/{id} 僅接受中繼資料；docType/版本/部門/業務別不可改
   await knowledgeStore.updateDocument({ documentId: id, ...data });
 };
 

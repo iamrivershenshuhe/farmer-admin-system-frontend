@@ -11,16 +11,18 @@ export function getMockAIResponse(userMessage: string, useRAG: boolean): Message
           {
             documentId: 'doc_1',
             chunkId: 'chunk_1',
-            documentName: '模擬文檔.pdf',
-            content:
+            docTitle: '模擬文檔',
+            snippet:
               '這是文檔中的一段引用內容，用於測試 RAG 參考來源的顯示效果。點擊可以預覽文檔。',
+            finalScore: 0.95,
             relevanceScore: 0.95,
           },
           {
             documentId: 'doc_2',
             chunkId: 'chunk_2',
-            documentName: '測試報告.pdf',
-            content: '這是另一份文檔的測試內容，確保多個來源也能正常顯示。',
+            docTitle: '測試報告',
+            snippet: '這是另一份文檔的測試內容，確保多個來源也能正常顯示。',
+            finalScore: 0.88,
             relevanceScore: 0.88,
           },
         ]

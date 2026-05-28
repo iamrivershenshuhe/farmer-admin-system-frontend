@@ -21,11 +21,11 @@
           :key="reference.chunkId"
           type="button"
           class="source-chip"
-          :title="reference.documentName"
+          :title="reference.docTitle"
           @click="handleFileClick(reference)"
         >
           <span class="chip-number">{{ index + 1 }}</span>
-          <span class="chip-name">{{ reference.documentName }}</span>
+          <span class="chip-name">{{ reference.docTitle }}</span>
         </button>
       </div>
     </Transition>
@@ -51,9 +51,9 @@ const isOpen = ref(false);
 const handleFileClick = (reference: DocumentReference): void => {
   const fileUrl = `/api/v1/knowledge/documents/${reference.documentId}/download`;
   openPreview({
-    fileName: reference.documentName,
+    fileName: reference.docTitle,
     fileUrl,
-    highlightText: reference.content,
+    highlightText: reference.snippet,
   });
 };
 </script>

@@ -93,29 +93,41 @@ export const businessTypeHandlers = [
     return HttpResponse.json(ok(null, '刪除成功'));
   }),
 
-  // 批次停用 / 啟用
+  // 批次停用 / 啟用 —— 後端回 BatchResult { success: id[], failed: {id,code,message}[] }
   http.post('*/api/v1/business-types/batch-active', async ({ request }) => {
     const { ids, active } = (await request.json()) as { ids: string[]; active: boolean };
-    mockBusinessTypes.forEach((bt) => {
-      if (ids.includes(bt.id)) bt.active = active;
+    const success: string[] = [];
+    const failed: { id: string; code: number; message: string }[] = [];
+    ids.forEach((id) => {
+      const bt = mockBusinessTypes.find((x) => x.id === id);
+      if (!bt) {
+        failed.push({ id, code: 20004, message: '業務別不存在' });
+        return;
+      }
+      bt.active = active;
+      success.push(id);
     });
-    return HttpResponse.json(ok({ affected: ids.length }));
+    return HttpResponse.json(ok({ success, failed }));
   }),
 
-  // 批次刪除（受守門：被指派者擋下並回報）
+  // 批次刪除（受守門：被指派者擋下並回報）—— 後端回 BatchResult
   http.post('*/api/v1/business-types/batch-delete', async ({ request }) => {
     const { ids } = (await request.json()) as { ids: string[] };
-    const blocked = ids.filter((id) => assignedBusinessTypeIds.has(id));
-    const removable = ids.filter((id) => !assignedBusinessTypeIds.has(id));
-    for (const id of removable) {
+    const success: string[] = [];
+    const failed: { id: string; code: number; message: string }[] = [];
+    for (const id of ids) {
+      if (assignedBusinessTypeIds.has(id)) {
+        failed.push({ id, code: 20003, message: '仍有人員使用此業務別，無法刪除' });
+        continue;
+      }
       const idx = mockBusinessTypes.findIndex((bt) => bt.id === id);
-      if (idx !== -1) mockBusinessTypes.splice(idx, 1);
+      if (idx === -1) {
+        failed.push({ id, code: 20004, message: '業務別不存在' });
+        continue;
+      }
+      mockBusinessTypes.splice(idx, 1);
+      success.push(id);
     }
-    if (blocked.length) {
-      return HttpResponse.json(fail(20003, `${blocked.length} 筆業務別仍被人員使用，無法刪除`), {
-        status: 400,
-      });
-    }
-    return HttpResponse.json(ok({ removed: removable.length }, '刪除成功'));
+    return HttpResponse.json(ok({ success, failed }, '刪除完成'));
   }),
 ];

@@ -65,51 +65,10 @@
       </div>
 
       <!-- 編輯模式下的可編輯欄位 -->
+      <!-- 後端 PUT /knowledge/documents/{id} 僅接受中繼資料；文件類別 / 版本 / 部門 / 業務別 -->
+      <!-- 一經建檔即不可改（須以「上傳新版本」更換），故編輯表單不再提供這些欄位。 -->
       <template v-if="isEdit">
         <hr class="divider" />
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label required">文件類別</label>
-            <select v-model="form.docType" class="form-select">
-              <option v-for="o in docTypeOptions" :key="o.value" :value="o.value">
-                {{ o.label }}
-              </option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">版本</label>
-            <input v-model="form.version" type="text" class="form-input" placeholder="如 2024-v1" />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">所屬部門</label>
-            <select v-model="form.departmentId" class="form-select" @change="onDepartmentChange">
-              <option :value="null">全機關公開</option>
-              <option v-for="o in departmentOptions" :key="o.value" :value="o.value">
-                {{ o.label }}
-              </option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">業務別</label>
-            <div v-if="!form.departmentId" class="bt-hint">請先選擇所屬部門</div>
-            <div v-else-if="!filteredBtOptions.length" class="bt-hint">此部門無業務別</div>
-            <div v-else class="bt-checklist">
-              <label v-for="o in filteredBtOptions" :key="o.value" class="bt-check">
-                <input
-                  type="checkbox"
-                  :value="o.value"
-                  :checked="form.businessTypeIds.includes(o.value)"
-                  @change="toggleBt(o.value)"
-                />
-                {{ o.label }}
-              </label>
-            </div>
-          </div>
-        </div>
-
         <div class="form-group">
           <label class="form-label">說明</label>
           <textarea v-model="form.description" class="form-textarea" rows="2" />
@@ -180,6 +139,7 @@ const props = defineProps<{
   modelValue: boolean;
   document: KnowledgeDocument | null;
   editable: boolean;
+  /** 唯讀詳情顯示用；編輯模式不再提供可改下拉（後端忽略不可變欄位）。 */
   docTypeOptions: DocTypeOption[];
   departmentOptions: SelectOption[];
   businessTypeOptions: BusinessTypeChoice[];
@@ -193,10 +153,6 @@ const emit = defineEmits<{
     e: 'save',
     id: string,
     data: {
-      docType: DocType;
-      version: string;
-      departmentId: string | null;
-      businessTypeIds: string[];
       description: string;
     }
   ): void;
@@ -215,10 +171,6 @@ const isLoadingVersions = ref(false);
 const currentVersions = computed(() => knowledgeStore.currentVersions);
 
 const form = ref({
-  docType: 'internal_regulation' as DocType,
-  version: '',
-  departmentId: null as string | null,
-  businessTypeIds: [] as string[],
   description: '',
 });
 
@@ -228,10 +180,6 @@ watch(
     isEdit.value = false;
     if (doc) {
       form.value = {
-        docType: doc.docType,
-        version: doc.version,
-        departmentId: doc.departmentId,
-        businessTypeIds: [...doc.businessTypeIds],
         description: doc.description ?? '',
       };
       isLoadingVersions.value = true;
@@ -249,22 +197,6 @@ const docTypeLabel = (t: DocType) => DOC_TYPE_LABELS[t] ?? t;
 const deptLabel = (id: string | null) => (id ? (props.deptNameMap[id] ?? id) : '全機關公開');
 const btLabel = (ids: string[]) => ids.map((id) => props.btNameMap[id] ?? id).join('、');
 
-// 業務別依所選部門連動過濾
-const filteredBtOptions = computed(() =>
-  form.value.departmentId
-    ? props.businessTypeOptions.filter((o) => o.departmentId === form.value.departmentId)
-    : []
-);
-
-const onDepartmentChange = () => {
-  form.value.businessTypeIds = [];
-};
-
-const toggleBt = (id: string) => {
-  const list = form.value.businessTypeIds;
-  form.value.businessTypeIds = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
-};
-
 const onConfirm = () => {
   if (!isEdit.value) {
     if (props.editable) isEdit.value = true;
@@ -273,10 +205,6 @@ const onConfirm = () => {
   }
   if (!props.document) return;
   emit('save', props.document.id, {
-    docType: form.value.docType,
-    version: form.value.version,
-    departmentId: form.value.docType === 'public_regulation' ? null : form.value.departmentId,
-    businessTypeIds: form.value.businessTypeIds,
     description: form.value.description,
   });
   isEdit.value = false;
@@ -583,12 +511,6 @@ const statusLblClass = (s: string) => STATUS_CLS[s] ?? 'lbl-default';
 }
 
 /* 編輯欄位 */
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
 .form-group {
   display: flex;
   flex-direction: column;
@@ -601,95 +523,29 @@ const statusLblClass = (s: string) => STATUS_CLS[s] ?? 'lbl-default';
   color: var(--text);
 }
 
-.form-label.required::after {
-  color: var(--error);
-  content: ' *';
-}
-
-.form-input,
-.form-select,
 .form-textarea {
   box-sizing: border-box;
   padding: 0.625rem 0.875rem;
+  font-family: inherit;
   font-size: 0.875rem;
   color: var(--text);
+  resize: vertical;
   background: var(--bg-1);
   border: 2px solid var(--border);
   border-radius: var(--r-md);
   transition: border-color 0.15s ease;
 }
 
-.form-input:hover,
-.form-select:hover,
 .form-textarea:hover {
   border-color: var(--border-strong);
 }
 
-.form-input:focus,
-.form-select:focus,
 .form-textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
 
-.form-select {
-  padding-right: 2.25rem;
-  appearance: none;
-  cursor: pointer;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--text-2) 50%),
-    linear-gradient(135deg, var(--text-2) 50%, transparent 50%);
-  background-repeat: no-repeat;
-  background-position:
-    right 16px center,
-    right 11px center;
-  background-size:
-    5px 5px,
-    5px 5px;
-}
-
-.form-textarea {
-  font-family: inherit;
-  resize: vertical;
-}
-
-.bt-checklist {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  max-height: 7rem;
-  padding: 0.5rem;
-  overflow-y: auto;
-  background: var(--bg-1);
-  border: 2px solid var(--border);
-  border-radius: var(--r-md);
-}
-
-.bt-check {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  font-size: 0.8125rem;
-  color: var(--text);
-}
-
-.bt-hint {
-  display: flex;
-  align-items: center;
-  min-height: 2.5rem;
-  padding: 0 0.875rem;
-  font-size: 0.8125rem;
-  color: var(--text-3);
-  background: var(--bg-1);
-  border: 2px dashed var(--border);
-  border-radius: var(--r-md);
-}
-
 @media (width <= 767px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-
   .kb-info-grid {
     grid-template-columns: 1fr;
   }

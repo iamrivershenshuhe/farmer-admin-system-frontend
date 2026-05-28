@@ -107,6 +107,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
+import { assignBusinessTypes } from '@/api/staff';
 import IconBtn from '@/components/base/IconBtn.vue';
 import BatchActionToolbar from '@/components/common/BatchActionToolbar.vue';
 import FilterSelect from '@/components/common/FilterSelect.vue';
@@ -236,11 +237,20 @@ const handleSubmit = async (data: {
 }) => {
   try {
     if (selected.value) {
-      await store.updateStaff(selected.value.id, {
+      const staffId = selected.value.id;
+      // 業務別不能經 PUT /staff/{id} 更新（後端忽略）；改走專屬指派端點
+      const prevBts = [...(selected.value.businessTypeIds ?? [])].sort();
+      const nextBts = [...data.businessTypeIds].sort();
+      const btsChanged =
+        prevBts.length !== nextBts.length || prevBts.some((id, i) => id !== nextBts[i]);
+      await store.updateStaff(staffId, {
         name: data.name,
         departmentId: data.departmentId || null,
-        businessTypeIds: data.businessTypeIds,
       });
+      if (btsChanged) {
+        await assignBusinessTypes(staffId, data.businessTypeIds);
+        await store.fetchList();
+      }
     } else {
       await store.createStaff({
         username: data.username,

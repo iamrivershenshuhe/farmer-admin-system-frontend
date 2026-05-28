@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import type { UserInfo, UserRole } from '@/types/user';
 
 import { mockDepartments } from '../department';
-import { DEFAULT_PASSWORD, mockUsers } from '../staff';
+import { mockUsers } from '../staff';
 import { fail, ok, paginate, readPageQuery, sortList } from './_helpers';
 
 /** 由 departmentId 查 mock 部門名稱（建立/更新人員時同步 entity.department 顯示欄位） */
@@ -38,9 +38,19 @@ export const staffHandlers = [
     return HttpResponse.json(ok(paginate(list, q.page, q.pageSize)));
   }),
 
-  // 可作為部門主管的人員（下拉用）
+  // 可作為部門主管的人員（下拉用）—— 後端回傳精簡 StaffManagerOption（非完整 UserInfo）
   http.get('*/api/v1/staff/managers', () => {
-    const items = mockUsers.filter((u) => (u.role === 'manager' || u.role === 'admin') && u.active);
+    const items = mockUsers
+      .filter((u) => (u.role === 'manager' || u.role === 'admin') && u.active)
+      .map((u) => ({
+        id: u.id,
+        employeeId: u.employeeId ?? u.username,
+        username: u.username,
+        name: u.name ?? '',
+        role: u.role,
+        departmentId: u.departmentId,
+        departmentName: u.departmentName ?? lookupDeptName(u.departmentId),
+      }));
     return HttpResponse.json(ok(items));
   }),
 
@@ -65,6 +75,8 @@ export const staffHandlers = [
       departmentId: body.departmentId ?? null,
       // entity 的 department(顯示名)由 departmentId 查 mock 部門得出，不再由 client 提供
       department: lookupDeptName(body.departmentId),
+      // 後端在 /staff response 一併提供 canonical 顯示欄位 departmentName
+      departmentName: lookupDeptName(body.departmentId),
       businessTypeIds: body.businessTypeIds ?? [],
       active: true,
       mustChangePassword: body.mustChangePassword ?? true,
@@ -79,10 +91,11 @@ export const staffHandlers = [
     const body = (await request.json()) as Partial<UserInfo>;
     const idx = mockUsers.findIndex((u) => u.id === params.id);
     if (idx === -1) return HttpResponse.json(fail(20004, '人員不存在'), { status: 404 });
-    // 若 payload 帶了 departmentId，同步重算顯示用 department 名稱（避免 entity 兩欄漂移）
+    // 若 payload 帶了 departmentId，同步重算顯示用 department / departmentName（避免兩欄漂移）
     const patch: Partial<UserInfo> = { ...body };
     if ('departmentId' in body) {
       patch.department = lookupDeptName(body.departmentId);
+      patch.departmentName = lookupDeptName(body.departmentId);
     }
     mockUsers[idx] = { ...mockUsers[idx], ...patch };
     return HttpResponse.json(ok(mockUsers[idx]));
@@ -97,13 +110,22 @@ export const staffHandlers = [
     return HttpResponse.json(ok(mockUsers[idx]));
   }),
 
-  // 重設密碼
+  // 重設密碼（後端回 data: null；不回傳明文密碼）
   http.post('*/api/v1/staff/:id/reset-password', async ({ params, request }) => {
     const { mustChangePassword } = (await request.json()) as { mustChangePassword: boolean };
     const idx = mockUsers.findIndex((u) => u.id === params.id);
     if (idx === -1) return HttpResponse.json(fail(20004, '人員不存在'), { status: 404 });
     mockUsers[idx].mustChangePassword = mustChangePassword;
-    return HttpResponse.json(ok({ defaultPassword: DEFAULT_PASSWORD }, '密碼已重設'));
+    return HttpResponse.json(ok(null, '密碼已重設'));
+  }),
+
+  // 指派業務別（全量覆寫）—— POST /staff/{id}/business-types，回更新後 UserInfo
+  http.post('*/api/v1/staff/:id/business-types', async ({ params, request }) => {
+    const { businessTypeIds } = (await request.json()) as { businessTypeIds: string[] };
+    const idx = mockUsers.findIndex((u) => u.id === params.id);
+    if (idx === -1) return HttpResponse.json(fail(20004, '人員不存在'), { status: 404 });
+    mockUsers[idx] = { ...mockUsers[idx], businessTypeIds: businessTypeIds ?? [] };
+    return HttpResponse.json(ok(mockUsers[idx], '業務別已更新'));
   }),
 
   // 停用 / 啟用（軟刪除，可逆）
@@ -126,29 +148,41 @@ export const staffHandlers = [
     return HttpResponse.json(ok(null, '刪除成功'));
   }),
 
-  // 批次停用 / 啟用
+  // 批次停用 / 啟用 —— 後端回 BatchResult { success: id[], failed: {id,code,message}[] }
   http.post('*/api/v1/staff/batch-active', async ({ request }) => {
     const { ids, active } = (await request.json()) as { ids: string[]; active: boolean };
-    mockUsers.forEach((u) => {
-      if (ids.includes(u.id)) u.active = active;
+    const success: string[] = [];
+    const failed: { id: string; code: number; message: string }[] = [];
+    ids.forEach((id) => {
+      const u = mockUsers.find((x) => x.id === id);
+      if (!u) {
+        failed.push({ id, code: 20004, message: '人員不存在' });
+        return;
+      }
+      u.active = active;
+      success.push(id);
     });
-    return HttpResponse.json(ok({ affected: ids.length }));
+    return HttpResponse.json(ok({ success, failed }));
   }),
 
-  // 批次刪除（受守門：啟用中者擋下）
+  // 批次刪除（受守門：啟用中者擋下）—— 後端回 BatchResult
   http.post('*/api/v1/staff/batch-delete', async ({ request }) => {
     const { ids } = (await request.json()) as { ids: string[] };
-    const blocked = ids.filter((id) => mockUsers.find((u) => u.id === id)?.active);
-    const removable = ids.filter((id) => !blocked.includes(id));
-    for (const id of removable) {
+    const success: string[] = [];
+    const failed: { id: string; code: number; message: string }[] = [];
+    for (const id of ids) {
       const idx = mockUsers.findIndex((u) => u.id === id);
-      if (idx !== -1) mockUsers.splice(idx, 1);
+      if (idx === -1) {
+        failed.push({ id, code: 20004, message: '人員不存在' });
+        continue;
+      }
+      if (mockUsers[idx].active) {
+        failed.push({ id, code: 20003, message: '帳號仍啟用中，請先停用再刪除' });
+        continue;
+      }
+      mockUsers.splice(idx, 1);
+      success.push(id);
     }
-    if (blocked.length) {
-      return HttpResponse.json(fail(20003, `${blocked.length} 個帳號仍啟用中，請先停用再刪除`), {
-        status: 400,
-      });
-    }
-    return HttpResponse.json(ok({ removed: removable.length }, '刪除成功'));
+    return HttpResponse.json(ok({ success, failed }, '刪除完成'));
   }),
 ];

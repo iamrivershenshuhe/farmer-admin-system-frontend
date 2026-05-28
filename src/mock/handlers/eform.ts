@@ -113,13 +113,13 @@ export const eformHandlers = [
     };
     mockSessions.unshift(record);
 
+    // 後端 generate/batch 回 HTTP 200（非 201）
     return HttpResponse.json(
       ENVELOPE({
         downloadUrl: `https://example.com/mock-batch-${record.id}.zip`,
         expiresAt: new Date(Date.now() + 3600000).toISOString(),
         files: record.generatedFiles,
-      }),
-      { status: 201 }
+      })
     );
   }),
 

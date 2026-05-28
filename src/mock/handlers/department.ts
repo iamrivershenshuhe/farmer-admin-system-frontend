@@ -104,32 +104,41 @@ export const departmentHandlers = [
     return HttpResponse.json(ok(null, '刪除成功'));
   }),
 
-  // 批次停用 / 啟用
+  // 批次停用 / 啟用 —— 後端回 BatchResult { success: id[], failed: {id,code,message}[] }
   http.post('*/api/v1/departments/batch-active', async ({ request }) => {
     const { ids, active } = (await request.json()) as { ids: string[]; active: boolean };
-    mockDepartments.forEach((d) => {
-      if (ids.includes(d.id)) d.active = active;
+    const success: string[] = [];
+    const failed: { id: string; code: number; message: string }[] = [];
+    ids.forEach((id) => {
+      const d = mockDepartments.find((x) => x.id === id);
+      if (!d) {
+        failed.push({ id, code: 20004, message: '部門不存在' });
+        return;
+      }
+      d.active = active;
+      success.push(id);
     });
-    return HttpResponse.json(ok({ affected: ids.length }));
+    return HttpResponse.json(ok({ success, failed }));
   }),
 
-  // 批次刪除（受守門）
+  // 批次刪除（受守門）—— 後端回 BatchResult
   http.post('*/api/v1/departments/batch-delete', async ({ request }) => {
     const { ids } = (await request.json()) as { ids: string[] };
-    const blocked = ids.filter((id) => {
-      const d = mockDepartments.find((x) => x.id === id);
-      return d ? isReferenced(d) : false;
-    });
-    const removable = ids.filter((id) => !blocked.includes(id));
-    for (const id of removable) {
+    const success: string[] = [];
+    const failed: { id: string; code: number; message: string }[] = [];
+    for (const id of ids) {
       const idx = mockDepartments.findIndex((d) => d.id === id);
-      if (idx !== -1) mockDepartments.splice(idx, 1);
+      if (idx === -1) {
+        failed.push({ id, code: 20004, message: '部門不存在' });
+        continue;
+      }
+      if (isReferenced(mockDepartments[idx])) {
+        failed.push({ id, code: 20003, message: '此部門仍被引用，無法刪除' });
+        continue;
+      }
+      mockDepartments.splice(idx, 1);
+      success.push(id);
     }
-    if (blocked.length) {
-      return HttpResponse.json(fail(20003, `${blocked.length} 個部門仍被引用，無法刪除`), {
-        status: 400,
-      });
-    }
-    return HttpResponse.json(ok({ removed: removable.length }, '刪除成功'));
+    return HttpResponse.json(ok({ success, failed }, '刪除完成'));
   }),
 ];

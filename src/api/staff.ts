@@ -49,12 +49,27 @@ export const createStaff = async (data: {
 }): Promise<ApiResponse<UserInfo>> => httpClient.post<UserInfo>('/staff', data);
 
 /**
- * 更新人員基本資料（含部門 / 業務範圍）
+ * 更新人員基本資料（姓名 / 部門）。
+ *
+ * 注意：後端 `PUT /staff/{id}` 不處理 `businessTypeIds`；業務別異動請改用
+ * {@link assignBusinessTypes}（`POST /staff/{id}/business-types`）。
  */
 export const updateStaff = async (
   id: string,
-  data: Partial<Pick<UserInfo, 'name' | 'departmentId' | 'businessTypeIds'>>
+  data: Partial<Pick<UserInfo, 'name' | 'departmentId'>>
 ): Promise<ApiResponse<UserInfo>> => httpClient.put<UserInfo>(`/staff/${id}`, data);
+
+/**
+ * 指派人員業務別（全量覆寫）。
+ *
+ * 後端 `PUT /staff/{id}` 不處理 `businessTypeIds`；業務別異動須走專屬端點
+ * `POST /staff/{id}/business-types`（body `{businessTypeIds}`，跨部門禁止）。
+ */
+export const assignBusinessTypes = async (
+  id: string,
+  businessTypeIds: string[]
+): Promise<ApiResponse<UserInfo>> =>
+  httpClient.post<UserInfo>(`/staff/${id}/business-types`, { businessTypeIds });
 
 /**
  * 更新人員權限（角色）

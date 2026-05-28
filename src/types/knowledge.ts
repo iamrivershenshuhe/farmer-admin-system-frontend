@@ -130,14 +130,14 @@ export interface UploadNewVersionRequest {
 }
 
 // 更新文件中繼資料請求
+//
+// 對齊後端 `PUT /knowledge/documents/{id}`：僅中繼資料可變。
+// docType / version / departmentId / businessTypeIds 一經建檔即不可改（須走新版本上傳），
+// 後端會靜默忽略，故前端不再送出。`documentId` 僅作為 path 參數，送出前由 api 層剝除。
 export interface UpdateDocumentRequest {
   documentId: string;
-  docType?: DocType;
-  version?: string;
-  versionNote?: string;
-  departmentId?: string | null;
-  businessTypeIds?: string[];
   description?: string;
+  versionNote?: string;
 }
 
 /**

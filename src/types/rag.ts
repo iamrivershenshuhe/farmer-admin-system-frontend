@@ -73,10 +73,9 @@ export interface BreadcrumbItem {
 /**
  * 文件引用（assistant message 附帶 references[]）。
  *
- * Shape 對齊 openapi.yaml#DocumentReference；保留 v1 別名 (`documentName` / `content` /
- * `relevanceScore`) 以兼容既有 UI 元件（SourceReference.vue、useChat.ts）。
- *
- * v1.3 起前端逐步遷移至 canonical 欄位 (`docTitle` / `snippet` / `finalScore`)。
+ * Shape 對齊 openapi.yaml#DocumentReference。後端 reference dict 恆發出
+ * `docTitle` / `snippet` / `finalScore` / `breadcrumb`，並仍附 `relevanceScore`
+ * 別名；舊 `documentName` / `content` 欄位後端從未發出，已於 v1.3 移除。
  */
 export interface DocumentReference {
   chunkId: string;
@@ -84,11 +83,7 @@ export interface DocumentReference {
   /**
    * 文件標題 (v1.2 canonical)；對應後端 `docTitle`，即 KnowledgeDocument.filename。
    */
-  docTitle?: string;
-  /**
-   * @deprecated v1 別名 = `docTitle`；v2.0 將移除。
-   */
-  documentName: string;
+  docTitle: string;
   /**
    * 結構化麵包屑路徑 (v1.2 canonical)；UI 渲染 chip / tooltip 使用。
    */
@@ -104,19 +99,15 @@ export interface DocumentReference {
   /** 步驟序號（作業手冊 doc_type） */
   stepNo?: number | null;
   /** 引文片段（v1.2 canonical），約 200–500 字 */
-  snippet?: string;
-  /**
-   * @deprecated v1 別名 = `snippet`；v2.0 將移除。
-   */
-  content?: string;
+  snippet: string;
   /** Reranker 原始分數 */
   rerankScore?: number;
   /** 最終分數（含 AUTHORITY_BONUS） */
-  finalScore?: number;
+  finalScore: number;
   /**
-   * @deprecated v1 別名 = `finalScore`；v2.0 將移除。
+   * @deprecated v1 別名 = `finalScore`；後端仍附此值。v2.0 將移除。
    */
-  relevanceScore: number;
+  relevanceScore?: number;
 }
 
 // 上傳文件請求

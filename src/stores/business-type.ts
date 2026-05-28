@@ -12,6 +12,7 @@ import {
   updateBusinessType as apiUpdate,
 } from '@/api/business-type';
 import { useListController } from '@/composables/useListController';
+import type { BatchResult } from '@/types/api';
 import type {
   BusinessType,
   CreateBusinessTypePayload,
@@ -148,17 +149,19 @@ export const useBusinessTypeStore = defineStore('business-type', () => {
     await refresh(deptId);
   }
 
-  async function batchSetActive(ids: string[], active: boolean): Promise<void> {
-    await batchSetBusinessTypeActive(ids, active);
+  async function batchSetActive(ids: string[], active: boolean): Promise<BatchResult> {
+    const res = await batchSetBusinessTypeActive(ids, active);
     // 行為保留:整個 per-dept 快取一次失效(粗但與舊版一致)
     businessTypesByDept.value = {};
     await fetchList();
+    return res.data;
   }
 
-  async function batchDelete(ids: string[]): Promise<void> {
-    await batchDeleteBusinessTypes(ids);
+  async function batchDelete(ids: string[]): Promise<BatchResult> {
+    const res = await batchDeleteBusinessTypes(ids);
     businessTypesByDept.value = {};
     await fetchList();
+    return res.data;
   }
 
   return {

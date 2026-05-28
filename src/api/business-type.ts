@@ -4,7 +4,7 @@
  * 對外端口清單；契約與資料形狀見 `src/types/business-type.ts` 與 `docs/CONTEXT.md` §4。
  */
 
-import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';
+import type { ApiResponse, BatchResult, PaginationParams, PaginationResponse } from '@/types/api';
 import type {
   BusinessType,
   CreateBusinessTypePayload,
@@ -66,8 +66,8 @@ export const setBusinessTypeActive = async (
 export const batchSetBusinessTypeActive = async (
   ids: string[],
   active: boolean
-): Promise<ApiResponse<void>> =>
-  httpClient.post<void>('/business-types/batch-active', { ids, active });
+): Promise<ApiResponse<BatchResult>> =>
+  httpClient.post<BatchResult>('/business-types/batch-active', { ids, active });
 
-export const batchDeleteBusinessTypes = async (ids: string[]): Promise<ApiResponse<void>> =>
-  httpClient.post<void>('/business-types/batch-delete', { ids });
+export const batchDeleteBusinessTypes = async (ids: string[]): Promise<ApiResponse<BatchResult>> =>
+  httpClient.post<BatchResult>('/business-types/batch-delete', { ids });

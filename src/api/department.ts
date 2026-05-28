@@ -4,7 +4,7 @@
  * 對外端口清單；契約與資料形狀見 `src/types/department.ts` 與 `docs/CONTEXT.md` §4。
  */
 
-import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';
+import type { ApiResponse, BatchResult, PaginationParams, PaginationResponse } from '@/types/api';
 import type { Department, DepartmentFormData } from '@/types/department';
 import { httpClient } from '@/utils/request';
 
@@ -58,8 +58,8 @@ export const setDepartmentActive = async (
 export const batchSetDepartmentActive = async (
   ids: string[],
   active: boolean
-): Promise<ApiResponse<void>> =>
-  httpClient.post<void>('/departments/batch-active', { ids, active });
+): Promise<ApiResponse<BatchResult>> =>
+  httpClient.post<BatchResult>('/departments/batch-active', { ids, active });
 
-export const batchDeleteDepartments = async (ids: string[]): Promise<ApiResponse<void>> =>
-  httpClient.post<void>('/departments/batch-delete', { ids });
+export const batchDeleteDepartments = async (ids: string[]): Promise<ApiResponse<BatchResult>> =>
+  httpClient.post<BatchResult>('/departments/batch-delete', { ids });

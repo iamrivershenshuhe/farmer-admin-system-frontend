@@ -11,6 +11,7 @@ import {
   updateDepartment as apiUpdate,
 } from '@/api/department';
 import { useListController } from '@/composables/useListController';
+import type { BatchResult } from '@/types/api';
 import type { Department, DepartmentFormData } from '@/types/department';
 
 interface Filters {
@@ -126,14 +127,16 @@ export const useDepartmentStore = defineStore('department', () => {
     await fetchList();
   }
 
-  async function batchSetActive(ids: string[], active: boolean): Promise<void> {
-    await batchSetDepartmentActive(ids, active);
+  async function batchSetActive(ids: string[], active: boolean): Promise<BatchResult> {
+    const res = await batchSetDepartmentActive(ids, active);
     await fetchList();
+    return res.data;
   }
 
-  async function batchDelete(ids: string[]): Promise<void> {
-    await batchDeleteDepartments(ids);
+  async function batchDelete(ids: string[]): Promise<BatchResult> {
+    const res = await batchDeleteDepartments(ids);
     await fetchList();
+    return res.data;
   }
 
   return {

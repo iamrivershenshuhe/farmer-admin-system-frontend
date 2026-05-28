@@ -4,7 +4,7 @@
  * 對外端口清單；契約與資料形狀見 `src/types/staff.ts` 與 `docs/CONTEXT.md` §4。
  */
 
-import type { ApiResponse, PaginationParams, PaginationResponse } from '@/types/api';
+import type { ApiResponse, BatchResult, PaginationParams, PaginationResponse } from '@/types/api';
 import type { UserInfo, UserRole } from '@/types/user';
 import { httpClient } from '@/utils/request';
 
@@ -101,7 +101,8 @@ export const setStaffActive = async (id: string, active: boolean): Promise<ApiRe
 export const batchSetStaffActive = async (
   ids: string[],
   active: boolean
-): Promise<ApiResponse<void>> => httpClient.post<void>('/staff/batch-active', { ids, active });
+): Promise<ApiResponse<BatchResult>> =>
+  httpClient.post<BatchResult>('/staff/batch-active', { ids, active });
 
-export const batchDeleteStaff = async (ids: string[]): Promise<ApiResponse<void>> =>
-  httpClient.post<void>('/staff/batch-delete', { ids });
+export const batchDeleteStaff = async (ids: string[]): Promise<ApiResponse<BatchResult>> =>
+  httpClient.post<BatchResult>('/staff/batch-delete', { ids });

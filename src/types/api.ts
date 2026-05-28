@@ -26,6 +26,28 @@ export interface PaginationResponse<T> {
 }
 
 /**
+ * 批次操作部分失敗項
+ *
+ * 對應後端組織模組批次端點（batch-active / batch-delete）回傳的失敗清單成員。
+ */
+export interface BatchFailure {
+  id: string;
+  code: number;
+  message: string;
+}
+
+/**
+ * 批次操作結果
+ *
+ * 後端組織模組批次端點回傳：成功的 id 清單與逐筆失敗原因。
+ * view 層據此向使用者呈現部分失敗（見各 OrgTab 的批次處理流程）。
+ */
+export interface BatchResult {
+  success: string[];
+  failed: BatchFailure[];
+}
+
+/**
  * 業務錯誤碼
  *
  * 格式：[模組前綴][序號]

@@ -14,6 +14,7 @@ import {
   updateStaffRole as apiUpdateRole,
 } from '@/api/staff';
 import { useListController } from '@/composables/useListController';
+import type { BatchResult } from '@/types/api';
 import type { UserInfo, UserRole } from '@/types/user';
 
 interface Filters {
@@ -164,14 +165,16 @@ export const useStaffStore = defineStore('staff', () => {
     await fetchList();
   }
 
-  async function batchSetActive(ids: string[], active: boolean): Promise<void> {
-    await batchSetStaffActive(ids, active);
+  async function batchSetActive(ids: string[], active: boolean): Promise<BatchResult> {
+    const res = await batchSetStaffActive(ids, active);
     await fetchList();
+    return res.data;
   }
 
-  async function batchDelete(ids: string[]): Promise<void> {
-    await batchDeleteStaff(ids);
+  async function batchDelete(ids: string[]): Promise<BatchResult> {
+    const res = await batchDeleteStaff(ids);
     await fetchList();
+    return res.data;
   }
 
   return {

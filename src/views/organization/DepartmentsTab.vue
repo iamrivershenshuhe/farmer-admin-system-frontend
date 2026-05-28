@@ -102,10 +102,12 @@ import BatchActionToolbar from '@/components/common/BatchActionToolbar.vue';
 import FilterSelect from '@/components/common/FilterSelect.vue';
 import Pagination from '@/components/common/Pagination.vue';
 import ViewToolbar from '@/components/common/ViewToolbar.vue';
+import { useNotification } from '@/composables/useNotification';
 import { usePermission } from '@/composables/usePermission';
 import { useTableSelection } from '@/composables/useTableSelection';
 import { useDepartmentStore } from '@/stores/department';
 import { useStaffStore } from '@/stores/staff';
+import type { BatchResult } from '@/types/api';
 import type { Department, DepartmentFormData } from '@/types/department';
 
 import ConfirmDeactivateModal from './components/ConfirmDeactivateModal.vue';
@@ -115,8 +117,16 @@ import DepartmentTable from './components/department/DepartmentTable.vue';
 
 const router = useRouter();
 const { hasFeaturePermission } = usePermission();
+const notify = useNotification();
 const store = useDepartmentStore();
 const staffStore = useStaffStore();
+
+/** 批次操作部分失敗時以 warning 呈現；全部成功則維持原本（無 toast）行為 */
+const surfaceBatchFailures = (result: BatchResult) => {
+  if (result.failed.length === 0) return;
+  const reasons = [...new Set(result.failed.map((f) => f.message))].join('、');
+  notify.warning(`已成功 ${result.success.length} 筆,失敗 ${result.failed.length} 筆:${reasons}`);
+};
 
 const canCreate = computed(() => hasFeaturePermission('departments', 'create'));
 const canEdit = computed(() => hasFeaturePermission('departments', 'edit'));
@@ -206,7 +216,8 @@ const onToggleActive = (dept: Department) => {
   }
 };
 const batchActivate = async () => {
-  await store.batchSetActive([...selectedIds.value], true);
+  const result = await store.batchSetActive([...selectedIds.value], true);
+  surfaceBatchFailures(result);
   clearSelection();
 };
 const askBatchDeactivate = () => {
@@ -215,8 +226,10 @@ const askBatchDeactivate = () => {
   showDeactivate.value = true;
 };
 const doDeactivate = async () => {
-  if (pendingDeactBatch.value.length) await store.batchSetActive(pendingDeactBatch.value, false);
-  else if (pendingDeact.value) await store.setActive(pendingDeact.value.id, false);
+  if (pendingDeactBatch.value.length) {
+    const result = await store.batchSetActive(pendingDeactBatch.value, false);
+    surfaceBatchFailures(result);
+  } else if (pendingDeact.value) await store.setActive(pendingDeact.value.id, false);
   showDeactivate.value = false;
   clearSelection();
 };
@@ -247,15 +260,19 @@ const openBatchDelete = () => {
   showDelete.value = true;
 };
 const confirmDeactivate = async () => {
-  if (pendingBatch.value.length) await store.batchSetActive(pendingBatch.value, false);
-  else if (pendingDept.value) await store.setActive(pendingDept.value.id, false);
+  if (pendingBatch.value.length) {
+    const result = await store.batchSetActive(pendingBatch.value, false);
+    surfaceBatchFailures(result);
+  } else if (pendingDept.value) await store.setActive(pendingDept.value.id, false);
   showDelete.value = false;
   clearSelection();
 };
 const confirmDelete = async () => {
   try {
-    if (pendingBatch.value.length) await store.batchDelete(pendingBatch.value);
-    else if (pendingDept.value) await store.deleteDepartment(pendingDept.value.id);
+    if (pendingBatch.value.length) {
+      const result = await store.batchDelete(pendingBatch.value);
+      surfaceBatchFailures(result);
+    } else if (pendingDept.value) await store.deleteDepartment(pendingDept.value.id);
     showDelete.value = false;
     clearSelection();
   } catch (err) {

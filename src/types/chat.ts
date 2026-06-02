@@ -80,6 +80,11 @@ export interface Message {
 // 對話
 export interface Conversation {
   id: string;
+  /**
+   * 後端真實 conversationId (UUID)。本地 `conv_` 對話送出首則訊息後，由 SSE `meta` 事件回填;
+   * 用於後續訊息延續同一後端對話。刻意不改動本地 `id`，以免破壞路由 / 列表的 id 綁定。
+   */
+  serverId?: string;
   /** 對話擁有者 (v1.2 後端必帶；前端 client-only 對話可暫缺) */
   userId?: string;
   title: string;

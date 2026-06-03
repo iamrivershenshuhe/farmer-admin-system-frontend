@@ -48,16 +48,21 @@ export const uploadDocument = async (
 ): Promise<ApiResponse<KnowledgeDocument[]>> => {
   const formData = new FormData();
 
-  request.items.forEach((item: UploadDocumentItem, i: number) => {
-    formData.append(`items[${i}].file`, item.file);
-    formData.append(`items[${i}].docType`, item.docType);
-    formData.append(`items[${i}].version`, item.version);
-    if (item.versionNote) formData.append(`items[${i}].versionNote`, item.versionNote);
-    if (item.departmentId !== null && item.departmentId !== undefined)
-      formData.append(`items[${i}].departmentId`, item.departmentId);
-    formData.append(`items[${i}].businessTypeIds`, JSON.stringify(item.businessTypeIds ?? []));
-    if (item.description) formData.append(`items[${i}].description`, item.description);
+  // 後端契約 (UploadDocumentsForm)：重複的 `files` 欄位 + 與其等長同序的 `metadata` JSON 陣列。
+  // title 由檔名帶入（modal 不另收標題）；空值欄位省略以套用後端預設。
+  const metadata = request.items.map((item: UploadDocumentItem) => ({
+    docType: item.docType,
+    title: item.file.name,
+    version: item.version || undefined,
+    versionNote: item.versionNote || undefined,
+    departmentId: item.departmentId ?? undefined,
+    businessTypeIds: item.businessTypeIds ?? [],
+    description: item.description || undefined,
+  }));
+  request.items.forEach((item: UploadDocumentItem) => {
+    formData.append('files', item.file);
   });
+  formData.append('metadata', JSON.stringify(metadata));
 
   return httpClient.post<KnowledgeDocument[]>('/knowledge/documents', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

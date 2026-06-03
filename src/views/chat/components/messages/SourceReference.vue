@@ -35,7 +35,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
+import { getDocument } from '@/api/knowledge';
 import { useFilePreview } from '@/composables/useFilePreview';
+import { resolveApiUrl } from '@/config';
 import type { DocumentReference } from '@/types/rag';
 
 interface Props {
@@ -47,14 +49,36 @@ defineProps<Props>();
 const { openPreview } = useFilePreview();
 
 const isOpen = ref(false);
+// 防重複點擊（以 chunkId 標記載入中的來源）
+const loadingId = ref<string | null>(null);
 
-const handleFileClick = (reference: DocumentReference): void => {
-  const fileUrl = `/api/v1/knowledge/documents/${reference.documentId}/download`;
-  openPreview({
-    fileName: reference.docTitle,
-    fileUrl,
-    highlightText: reference.snippet,
-  });
+/**
+ * 開啟來源原始檔預覽。
+ *
+ * 後端的簽章下載 URL (`fileUrl`) 是短效 token（會過期），故不存於 message.references；
+ * 改在點擊當下查 `GET /knowledge/documents/{id}` 取「當次新鮮」的 fileUrl 與正確副檔名的
+ * filename（供預覽 modal 判斷檔型）。RAG 引用之文件必在使用者可見範圍內，故權限相符；
+ * 文件已刪除 / 無權限則靜默略過。
+ */
+const handleFileClick = async (reference: DocumentReference): Promise<void> => {
+  if (loadingId.value) return;
+  loadingId.value = reference.chunkId;
+  try {
+    const { data } = await getDocument(reference.documentId);
+    const doc = data.document;
+    if (!doc?.fileUrl) return;
+    openPreview({
+      fileName: doc.filename,
+      // resolve the backend's root-relative signed URL to an absolute one so the
+      // preview's raw fetch hits the backend (dev: FE :5173 ≠ BE :8000), not the SPA
+      fileUrl: resolveApiUrl(doc.fileUrl),
+      highlightText: reference.snippet,
+    });
+  } catch (err) {
+    console.warn('開啟來源文件失敗（可能已刪除或無權限）:', err);
+  } finally {
+    loadingId.value = null;
+  }
 };
 </script>
 

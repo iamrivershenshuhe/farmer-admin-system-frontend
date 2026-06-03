@@ -16,7 +16,7 @@
     </template>
 
     <template #cell-department="{ row }">
-      <span class="nowrap">{{ asUser(row).department || '—' }}</span>
+      <span class="nowrap">{{ asUser(row).departmentName || '—' }}</span>
     </template>
 
     <template #cell-businessRange="{ row }">

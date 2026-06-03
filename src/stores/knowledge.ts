@@ -7,7 +7,6 @@ import {
   deleteSingleVersion as apiDeleteSingleVersion,
   getDocument as apiGetDocument,
   getDocuments,
-  getDocumentTypes,
   updateDocument as apiUpdateDocument,
   uploadDocument as apiUploadDocument,
   uploadNewVersion as apiUploadNewVersion,
@@ -15,6 +14,7 @@ import {
 import { useListController } from '@/composables/useListController';
 import { ApiError } from '@/types/api';
 import type {
+  DocType,
   DocTypeOption,
   DocumentFacets,
   GetDocumentsRequest,
@@ -23,7 +23,7 @@ import type {
   UploadKnowledgeDocumentRequest,
   UploadNewVersionRequest,
 } from '@/types/knowledge';
-import { DocumentStatus } from '@/types/knowledge';
+import { DOC_TYPE_LABELS, DocumentStatus } from '@/types/knowledge';
 
 type Filters = Pick<
   GetDocumentsRequest,
@@ -40,6 +40,13 @@ const DEFAULT_FILTERS: Filters = {
   sortOrder: 'desc',
 };
 
+// 文件類別是固定 enum（doc-type-business-rules）；上傳選單需「全部可選類別」，
+// 與後端 /categories（僅回有文件的類別 + count）不同，故由 DOC_TYPE_LABELS 靜態建構。
+const DOC_TYPE_OPTIONS: DocTypeOption[] = (Object.keys(DOC_TYPE_LABELS) as DocType[]).map((value) => ({
+  value,
+  label: DOC_TYPE_LABELS[value],
+}));
+
 /**
  * 知識庫狀態管理 — 薄層。
  *
@@ -51,7 +58,7 @@ const DEFAULT_FILTERS: Filters = {
  */
 export const useKnowledgeStore = defineStore('knowledge', () => {
   // ── 知識庫專屬狀態（list-controller 不涵蓋）─────────────────────
-  const docTypeOptions = ref<DocTypeOption[]>([]);
+  const docTypeOptions = ref<DocTypeOption[]>(DOC_TYPE_OPTIONS);
   /** 後端依當次身分回傳的可見範圍 facets（篩選器選項唯一來源）*/
   const facets = ref<DocumentFacets>({ docTypes: [], statuses: [], businessTypeIds: [] });
   /** 目前開啟的文件詳情 */
@@ -95,11 +102,6 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
   // ── Actions ─────────────────────────────────────────────────────
   function fetchDocuments(): Promise<void> {
     return ctrl.fetchPage();
-  }
-
-  async function fetchDocumentTypes(): Promise<void> {
-    const res = await getDocumentTypes();
-    docTypeOptions.value = res.data;
   }
 
   /** 載入文件詳情與版本鏈 */
@@ -193,17 +195,16 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
     totalPages,
     isLoading,
     filters,
-    docTypeOptions,
     facets,
     currentDocument,
     currentVersions,
+    docTypeOptions,
     // Getters
     startIndex,
     endIndex,
     hasProcessing,
     // Actions
     fetchDocuments,
-    fetchDocumentTypes,
     fetchDocument,
     setPage,
     setPageSize,

@@ -381,7 +381,6 @@ const startPolling = () => {
 onMounted(async () => {
   await Promise.all([
     knowledgeStore.fetchDocuments(),
-    knowledgeStore.fetchDocumentTypes(),
     departmentStore.fetchDepartments(),
   ]);
   await Promise.all(

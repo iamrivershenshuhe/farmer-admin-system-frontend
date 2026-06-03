@@ -10,7 +10,6 @@ import type { ApiResponse } from '@/types/api';
 import type {
   BatchDeleteDocumentsRequest,
   DeleteDocumentRequest,
-  DocTypeOption,
   DocumentDetail,
   DocumentListResult,
   GetDocumentsRequest,
@@ -117,11 +116,4 @@ export const batchDeleteDocuments = async (
   request: BatchDeleteDocumentsRequest
 ): Promise<ApiResponse<{ removed: number }>> => {
   return httpClient.post<{ removed: number }>('/knowledge/documents/batch-delete', request);
-};
-
-/**
- * 獲取文件類別選項（供篩選下拉）
- */
-export const getDocumentTypes = async (): Promise<ApiResponse<DocTypeOption[]>> => {
-  return httpClient.get<DocTypeOption[]>('/knowledge/categories');
 };
